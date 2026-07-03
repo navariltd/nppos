@@ -1,0 +1,481 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2026-07-03 00:00:40.523107",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "entitlement_voucher",
+  "entitlement_type",
+  "pos_profile",
+  "column_break_riym",
+  "company",
+  "party_type",
+  "party",
+  "posting_date",
+  "accounting_dimensions_section",
+  "cost_center",
+  "dimension_col_break",
+  "project",
+  "assignment_section",
+  "agent",
+  "column_break_iosy",
+  "merchant",
+  "column_break_fsmz",
+  "warehouse",
+  "entitlement_section",
+  "item",
+  "currency",
+  "column_break_jrjo",
+  "uom",
+  "rate",
+  "column_break_emhf",
+  "qty",
+  "amount",
+  "section_break_mpmv",
+  "description",
+  "amended_from",
+  "more_info_tab",
+  "printing_settings_section",
+  "letter_head",
+  "group_same_items",
+  "language",
+  "column_break_hlvk",
+  "select_print_heading",
+  "section_break_wsis",
+  "paid_from",
+  "paid_from_account_currency",
+  "paid_to",
+  "paid_to_account_currency",
+  "column_break_fvlg",
+  "bank_account",
+  "party_bank_account",
+  "party_bank_account_name",
+  "party_bank_account_no",
+  "commission_section",
+  "sales_partner",
+  "column_break_yxns",
+  "amount_eligible_for_commission",
+  "commission_rate",
+  "total_commission",
+  "sales_team_section",
+  "sales_team"
+ ],
+ "fields": [
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Entitlement Redemption",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_riym",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "entitlement_voucher",
+   "fieldtype": "Link",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Entitlement Voucher",
+   "link_filters": "[[\"Entitlement Voucher\",\"docstatus\",\"=\",\"1\"]]",
+   "options": "Entitlement Voucher",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "entitlement_voucher.entitlement_type",
+   "fetch_if_empty": 1,
+   "fieldname": "entitlement_type",
+   "fieldtype": "Select",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Entitlement Type",
+   "options": "Goods\nCash",
+   "reqd": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "accounting_dimensions_section",
+   "fieldtype": "Section Break",
+   "label": "Accounting Dimensions"
+  },
+  {
+   "fetch_from": "entitlement_voucher.cost_center",
+   "fetch_if_empty": 1,
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
+  },
+  {
+   "fieldname": "dimension_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "entitlement_voucher.project",
+   "fetch_if_empty": 1,
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project",
+   "options": "Project"
+  },
+  {
+   "fieldname": "entitlement_section",
+   "fieldtype": "Section Break",
+   "label": "Entitlement"
+  },
+  {
+   "depends_on": "eval: doc.entitlement_type == \"Goods\"",
+   "fetch_from": "entitlement_voucher.item",
+   "fetch_if_empty": 1,
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Item",
+   "mandatory_depends_on": "eval: doc.entitlement_type == \"Goods\"",
+   "options": "Item"
+  },
+  {
+   "fetch_from": "entitlement_voucher.currency",
+   "fetch_if_empty": 1,
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "mandatory_depends_on": "eval: doc.entitlement_type == \"Cash\"",
+   "options": "Currency"
+  },
+  {
+   "fieldname": "column_break_jrjo",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval: doc.entitlement_type == \"Goods\"",
+   "fetch_from": "entitlement_voucher.qty",
+   "fetch_if_empty": 1,
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Quantity",
+   "mandatory_depends_on": "eval: doc.entitlement_type == \"Goods\""
+  },
+  {
+   "fetch_from": "entitlement_voucher.amount",
+   "fetch_if_empty": 1,
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "mandatory_depends_on": "eval: doc.entitlement_type == \"Cash\""
+  },
+  {
+   "fieldname": "column_break_emhf",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval: doc.entitlement_type == \"Goods\"",
+   "fetch_from": "entitlement_voucher.uom",
+   "fetch_if_empty": 1,
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "label": "UOM",
+   "mandatory_depends_on": "eval: doc.entitlement_type == \"Goods\"",
+   "options": "UOM"
+  },
+  {
+   "fieldname": "section_break_mpmv",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fetch_from": "entitlement_voucher.description",
+   "fetch_if_empty": 1,
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fetch_from": "entitlement_voucher.party_type",
+   "fetch_if_empty": 1,
+   "fieldname": "party_type",
+   "fieldtype": "Link",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Party Type",
+   "options": "DocType"
+  },
+  {
+   "fetch_from": "entitlement_voucher.party",
+   "fetch_if_empty": 1,
+   "fieldname": "party",
+   "fieldtype": "Dynamic Link",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Party",
+   "options": "party_type"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "assignment_section",
+   "fieldtype": "Section Break",
+   "label": "Assignment"
+  },
+  {
+   "fieldname": "agent",
+   "fieldtype": "Link",
+   "label": "Agent",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "column_break_iosy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "merchant",
+   "fieldtype": "Link",
+   "label": "Merchant",
+   "options": "Supplier"
+  },
+  {
+   "fieldname": "column_break_fsmz",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "mandatory_depends_on": "eval: doc.entitlement_type == \"Goods\"",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "pos_profile",
+   "fieldtype": "Link",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "in_preview": 1,
+   "in_standard_filter": 1,
+   "label": "POS Profile",
+   "link_filters": "[[\"POS Profile\",\"enable_entitlement_distribution\",\"=\",1],[\"POS Profile\",\"disabled\",\"=\",0]]",
+   "options": "POS Profile"
+  },
+  {
+   "fieldname": "more_info_tab",
+   "fieldtype": "Tab Break",
+   "label": "More Info"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "printing_settings_section",
+   "fieldtype": "Section Break",
+   "label": "Printing Settings"
+  },
+  {
+   "fieldname": "letter_head",
+   "fieldtype": "Link",
+   "label": "Letter Head",
+   "options": "Letter Head"
+  },
+  {
+   "default": "0",
+   "fieldname": "group_same_items",
+   "fieldtype": "Check",
+   "label": "Group same items"
+  },
+  {
+   "fieldname": "language",
+   "fieldtype": "Data",
+   "label": "Print Language"
+  },
+  {
+   "fieldname": "column_break_hlvk",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "select_print_heading",
+   "fieldtype": "Link",
+   "label": "Print Heading",
+   "options": "Print Heading"
+  },
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "ENT-RED-.YYYY.-.MM.-"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "commission_section",
+   "fieldtype": "Section Break",
+   "label": "Commission"
+  },
+  {
+   "fieldname": "sales_partner",
+   "fieldtype": "Link",
+   "label": "Sales Partner",
+   "options": "Sales Partner"
+  },
+  {
+   "fieldname": "column_break_yxns",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "amount_eligible_for_commission",
+   "fieldtype": "Currency",
+   "label": "Amount Eligible for Commission"
+  },
+  {
+   "fieldname": "commission_rate",
+   "fieldtype": "Float",
+   "label": "Commission Rate (%)"
+  },
+  {
+   "fieldname": "total_commission",
+   "fieldtype": "Currency",
+   "label": "Total Commission"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "sales_team_section",
+   "fieldtype": "Section Break",
+   "label": "Sales Team"
+  },
+  {
+   "fieldname": "sales_team",
+   "fieldtype": "Table",
+   "label": "Sales Team",
+   "options": "Sales Team"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "in_preview": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "Posting Date"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_wsis",
+   "fieldtype": "Section Break",
+   "label": "Accounting Details"
+  },
+  {
+   "fieldname": "column_break_fvlg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "party_bank_account",
+   "fieldtype": "Link",
+   "label": "Party Bank Account",
+   "options": "Bank Account"
+  },
+  {
+   "fieldname": "paid_from",
+   "fieldtype": "Link",
+   "label": "Account Paid From",
+   "mandatory_depends_on": "eval: doc.entitlement_type == \"Cash\"",
+   "options": "Account"
+  },
+  {
+   "fieldname": "paid_to",
+   "fieldtype": "Link",
+   "label": "Account Paid To",
+   "mandatory_depends_on": "eval: doc.entitlement_type == \"Cash\"",
+   "options": "Account"
+  },
+  {
+   "fieldname": "bank_account",
+   "fieldtype": "Link",
+   "label": "Company Bank Account",
+   "options": "Bank Account"
+  },
+  {
+   "fetch_from": "party_bank_account.account_name",
+   "fieldname": "party_bank_account_name",
+   "fieldtype": "Data",
+   "label": "Party Bank Account Name"
+  },
+  {
+   "fetch_from": "party_bank_account.bank_account_no",
+   "fieldname": "party_bank_account_no",
+   "fieldtype": "Data",
+   "label": "Party Bank Account No"
+  },
+  {
+   "fetch_from": "paid_from.account_currency",
+   "fieldname": "paid_from_account_currency",
+   "fieldtype": "Link",
+   "label": "Account Currency (From)",
+   "options": "Currency"
+  },
+  {
+   "fetch_from": "paid_to.account_currency",
+   "fieldname": "paid_to_account_currency",
+   "fieldtype": "Link",
+   "label": "Account Currency (To)",
+   "options": "Currency"
+  },
+  {
+   "fetch_from": "entitlement_voucher.rate",
+   "fetch_if_empty": 1,
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "label": "Rate",
+   "mandatory_depends_on": "eval: doc.entitlement_type == \"Cash\""
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [
+  {
+   "link_doctype": "Payment Entry",
+   "link_fieldname": "entitlement_redemption"
+  },
+  {
+   "link_doctype": "Stock Entry",
+   "link_fieldname": "entitlement_redemption"
+  }
+ ],
+ "modified": "2026-07-03 02:04:51.680627",
+ "modified_by": "Administrator",
+ "module": "NPPOS",
+ "name": "Entitlement Redemption",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
