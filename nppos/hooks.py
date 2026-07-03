@@ -261,3 +261,5 @@ accounting_dimension_doctypes = [
 	"Entitlement Voucher",
 	"Entitlement Redemption",
 ]
+
+website_route_rules = [{'from_route': '/np-pos/<path:app_path>', 'to_route': 'np-pos'},]
