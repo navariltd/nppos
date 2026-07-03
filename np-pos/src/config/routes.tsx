@@ -12,7 +12,12 @@ const NotFound = lazy(() => import("@/app/errors/not-found/page"));
 const InternalServerError = lazy(
   () => import("@/app/errors/internal-server-error/page"),
 );
-const Dashboard = lazy(() => import("@/app/dashboard/page"));
+
+const Dashboard = lazy(() => import("@/app/pos/page"));
+const CashVouchers = lazy(() => import("@/app/pos/cash-vouchers/page"));
+const AtmCard = lazy(() => import("@/app/pos/atm-card/page"));
+const TransactionHistory = lazy(() => import("@/app/pos/transactions/page"));
+const GoodsHampers = lazy(() => import("@/app/pos/goods-hampers/page"));
 
 const UserSettings = lazy(() => import("@/app/settings/user/page"));
 const AccountSettings = lazy(() => import("@/app/settings/account/page"));
@@ -57,6 +62,38 @@ export const routes: RouteConfig[] = [
     ),
   },
   {
+    path: "/pos/goods-hampers",
+    element: (
+      <ProtectedRoute>
+        <GoodsHampers />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/pos/cash-vouchers",
+    element: (
+      <ProtectedRoute>
+        <CashVouchers />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/pos/atm-card",
+    element: (
+      <ProtectedRoute>
+        <AtmCard />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/pos/transactions",
+    element: (
+      <ProtectedRoute>
+        <TransactionHistory />
+      </ProtectedRoute>
+    ),
+  },
+  {
     path: "/users",
     element: (
       <RoleProtectedRoute roles={["System Manager", "Administrator"]}>
@@ -88,7 +125,6 @@ export const routes: RouteConfig[] = [
       </ProtectedRoute>
     ),
   },
-  // Error pages (public)
   {
     path: "/errors/unauthorized",
     element: <Unauthorized />,

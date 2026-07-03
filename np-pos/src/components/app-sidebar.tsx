@@ -1,7 +1,15 @@
 "use client";
 
 import { Logo } from "@/components/logo";
-import { LayoutDashboard, LogIn, User } from "lucide-react";
+import {
+  Banknote,
+  CreditCard,
+  History,
+  LayoutDashboard,
+  LogIn,
+  Package,
+  User,
+} from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 
@@ -24,18 +32,38 @@ const data = {
 
 const privateNavGroups = [
   {
-    label: "Main",
+    label: "Core Operations",
     items: [
       {
-        title: "POS",
+        title: "POS Dashboard",
         url: "/pos",
         icon: LayoutDashboard,
+      },
+      {
+        title: "Goods / Hampers",
+        url: "/pos/goods-hampers",
+        icon: Package,
+      },
+      {
+        title: "Cash Vouchers",
+        url: "/pos/cash-vouchers",
+        icon: Banknote,
+      },
+      {
+        title: "ATM Bank Card",
+        url: "/pos/atm-card",
+        icon: CreditCard,
       },
     ],
   },
   {
-    label: "User Management",
+    label: "Management & Records",
     items: [
+      {
+        title: "Transaction History",
+        url: "/pos/transactions",
+        icon: History,
+      },
       {
         title: "Users",
         url: "/users",
