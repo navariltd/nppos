@@ -163,7 +163,7 @@ export const Table = ({
       onChange: (val: any) => handleCellChange(rowIndex, field.fieldname, val),
       disabled: disabled || false,
       required: field.reqd === 1,
-      label: field.label,
+      label: "", // Set label to empty string
       placeholder: field.placeholder,
       className: "w-full",
     };
@@ -181,7 +181,7 @@ export const Table = ({
         return <Barcode {...commonProps} />;
 
       case "Button":
-        return <ButtonField {...commonProps} label={field.label} />;
+        return <ButtonField {...commonProps} label="" />;
 
       case "Check":
         return (
@@ -438,7 +438,7 @@ export const Table = ({
             </table>
           </div>
 
-          <div className="p-2 border-t bg-muted/20 flex justify-end">
+          <div className="p-2 border-t bg-muted/20 flex justify-start">
             <button
               type="button"
               disabled={disabled || fields.length === 0}

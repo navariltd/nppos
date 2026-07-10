@@ -377,7 +377,7 @@ export const LinkField = ({
   };
 
   const selectedOption = value ? { label: value, value } : null;
-  const displayLabel = label || doctype;
+  const displayLabel = label;
 
   const dropdown =
     isOpen && !disabled && doctype ? (
