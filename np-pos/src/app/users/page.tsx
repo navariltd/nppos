@@ -3,11 +3,12 @@
 import { BaseLayout } from "@/components/layouts/base-layout";
 import { useUser } from "@/contexts/user-context";
 import {
-  useFrappeCreateDoc,
-  useFrappeGetCall,
-  useFrappeGetDocList,
-  useFrappeUpdateDoc,
-} from "frappe-react-sdk";
+  callDelete,
+  callGet,
+  getList,
+  insertDoc,
+  updateDoc,
+} from "@/lib/frappe-service";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "./components/data-table";
@@ -36,13 +37,10 @@ export default function UsersPage() {
         role.role === "System Manager" || role.role === "Administrator",
     ) || false;
 
-  const { data: doctypeData } = useFrappeGetCall(
-    "frappe.desk.form.load.getdoctype",
-    {
-      doctype: "User",
-      with_parent: 1,
-    },
-  );
+  const { data: doctypeData } = callGet("frappe.desk.form.load.getdoctype", {
+    doctype: "User",
+    with_parent: 1,
+  });
 
   useEffect(() => {
     if (doctypeData?.docs) {
@@ -91,14 +89,12 @@ export default function UsersPage() {
   const allFields = [...listFields, ...filterFields, ...standardFilterFields];
   const uniqueFields = [...new Set(allFields)];
 
-  console.log("Unique fields for User doctype:", uniqueFields);
-
   const {
     data: frappeUsers,
     isLoading: isUsersLoading,
     error: usersError,
     mutate: mutateUsers,
-  } = useFrappeGetDocList<FrappeUser>("User", {
+  } = getList<FrappeUser>("User", {
     fields: uniqueFields.length > 0 ? uniqueFields : ["name"],
     limit: 100,
     orderBy: {
@@ -107,8 +103,13 @@ export default function UsersPage() {
     },
   });
 
-  const { createDoc, loading: isCreating } = useFrappeCreateDoc();
-  const { updateDoc, loading: isUpdating } = useFrappeUpdateDoc();
+  const { insert, loading: isCreating } = insertDoc<FrappeUser>();
+
+  const { update, loading: isUpdating } = updateDoc<FrappeUser>();
+
+  const { delete: deleteCall, loading: isDeleting } = callDelete(
+    "frappe.client.delete",
+  );
 
   useEffect(() => {
     if (frappeUsers && Array.isArray(frappeUsers)) {
@@ -135,7 +136,7 @@ export default function UsersPage() {
         send_welcome_email: false,
       };
 
-      await createDoc("User", newUser);
+      await insert("User", newUser);
       toast.success("User created successfully");
       mutateUsers();
     } catch (error: any) {
@@ -156,25 +157,12 @@ export default function UsersPage() {
     }
 
     try {
-      const response = await fetch("/api/method/frappe.client.delete", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          doctype: "User",
-          name: user.name,
-        }),
+      await deleteCall({
+        doctype: "User",
+        name: user.name,
       });
-
-      const result = await response.json();
-
-      if (result.data) {
-        toast.success("User deleted successfully");
-        mutateUsers();
-      } else {
-        throw new Error(result.message || "Failed to delete user");
-      }
+      toast.success("User deleted successfully");
+      mutateUsers();
     } catch (error: any) {
       console.error("Error deleting user:", error);
       toast.error(error?.message || "Failed to delete user. Please try again.");
@@ -192,7 +180,7 @@ export default function UsersPage() {
     }
 
     try {
-      await updateDoc("User", user.name, {
+      await update("User", user.name, {
         [field]: value,
       });
       toast.success("User updated successfully");
@@ -242,7 +230,7 @@ export default function UsersPage() {
             onEditUser={handleEditUser}
             onAddUser={handleAddUser}
             onToggleStatus={handleToggleStatus}
-            isLoading={isUsersLoading || isCreating || isUpdating}
+            isLoading={isUsersLoading || isCreating || isUpdating || isDeleting}
             isSystemAdmin={isSystemAdmin}
             listFields={listFields}
             filterFields={filterFields}
