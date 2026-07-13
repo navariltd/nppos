@@ -1,10 +1,12 @@
 "use client";
 
+/** POS layout that wraps POS pages with opening entry checks and authentication guards. */
+
 import { POSOpeningModal } from "@/app/pos/components/POSOpeningModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { POSProvider, usePOS } from "@/contexts/pos-context";
 import { useUser } from "@/contexts/user-context";
-import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 /** Renders skeleton placeholders matching POS page content structure during metadata or authentication loading. */
 function ContentSkeleton() {
@@ -33,6 +35,7 @@ function POSLayoutContent() {
   const { user, isLoading, isLoggedOut } = useUser();
   const { posOpeningEntry, isLoadingMetadata, refreshPOSMetadata } = usePOS();
   const location = useLocation();
+  const navigate = useNavigate();
 
   if (isLoadingMetadata && !posOpeningEntry) {
     return <ContentSkeleton />;
@@ -62,7 +65,10 @@ function POSLayoutContent() {
             <Outlet />
           </div>
         </div>
-        <POSOpeningModal onSuccess={refreshPOSMetadata} />
+        <POSOpeningModal onSuccess={() => {
+          refreshPOSMetadata();
+          navigate("/pos", { replace: true });
+        }} />
       </div>
     );
   }
