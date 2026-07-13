@@ -350,7 +350,7 @@ export const FrappeField = ({
         return (
           <LinkField
             {...commonProps}
-            doctype={linkDoctype}
+            doctype={linkDoctype || ""}
             filters={filters}
             query={query}
           />
@@ -362,8 +362,8 @@ export const FrappeField = ({
         return (
           <DynamicLink
             {...commonProps}
-            doctype={parentDoctype}
-            referenceDoctype={refDoctype}
+            doctype={parentDoctype || ""}
+            referenceDoctype={refDoctype || ""}
             linkFieldname={linkFieldname}
             filters={filters}
           />
@@ -482,13 +482,20 @@ export const FrappeField = ({
       }
       
       case "table_multi_select": {
-        // For TableMultiSelect, options is parsed from field options or optionsProp
-        const multiSelectOptions = parseOptions(optionsProp || field.options);
+        const tableDoctype = typeof field.options === "string" ? field.options : "";
         return (
           <TableMultiSelect
-            {...commonProps}
+            doctype={tableDoctype}
             value={value || []}
-            options={multiSelectOptions}
+            onChange={(val) => onChange?.(val, field.fieldname)}
+            disabled={disabled || field.disabled}
+            required={isRequired}
+            label={showLabel ? field.label || field.fieldname : undefined}
+            placeholder={field.placeholder}
+            className={cn(width && `w-[${width}px]`, className)}
+            linkFieldname={field.linkFieldname}
+            filters={filters}
+            query={query}
           />
         );
       }

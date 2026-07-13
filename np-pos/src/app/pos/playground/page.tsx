@@ -20,16 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { clearPageState, usePageState } from "@/hooks/use-page-state";
 import { callPost } from "@/lib/frappe-service";
-import {
-  Code,
-  Eye,
-  FileText,
-  Loader2,
-  Play,
-  RefreshCw,
-  Settings,
-  Table2,
-} from "lucide-react";
+import { Code, Eye, FileText, Play, RefreshCw, Settings } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -219,7 +210,7 @@ const TableRowEditor = ({
           </div>
         </div>
       </div>
-    </div> 
+    </div>
   );
 };
 
@@ -559,14 +550,7 @@ export default function PlaygroundPage() {
                 selectedFieldType === "Autocomplete" ||
                 selectedFieldType === "Dynamic Link") && (
                 <div className="space-y-2">
-                  <Label htmlFor="options">
-                    {selectedFieldType === "Table" ||
-                    selectedFieldType === "Table MultiSelect"
-                      ? "Child DocType (istable == 1)"
-                      : selectedFieldType === "Select"
-                        ? "Options (one per line)"
-                        : "Parent DocType (istable == 0)"}
-                  </Label>
+                  <Label htmlFor="options">Options</Label>
                   {isLinkField || isTableField ? (
                     <LinkField
                       doctype={"DocType"}
@@ -577,11 +561,7 @@ export default function PlaygroundPage() {
                           options: value,
                         }));
                       }}
-                      filters={
-                        isTableField
-                          ? { istable: 1 }
-                          : { istable: 0 }
-                      }
+                      filters={isTableField ? { istable: 1 } : { istable: 0 }}
                     />
                   ) : (
                     <Textarea
@@ -597,14 +577,6 @@ export default function PlaygroundPage() {
                       rows={4}
                     />
                   )}
-                  <p className="text-xs text-muted-foreground">
-                    {isTableField &&
-                      'Child doctypes have istable == 1 (fetched via frappe.client.get_list with filter ["istable", "=", 1])'}
-                    {isLinkField &&
-                      'Parent doctypes have istable == 0 (fetched via frappe.client.get_list with filter ["istable", "=", 0])'}
-                    {selectedFieldType === "Select" &&
-                      "Enter each option on a new line"}
-                  </p>
                 </div>
               )}
 
@@ -688,7 +660,6 @@ export default function PlaygroundPage() {
                 </div>
               </div>
             </div>
-
           </div>
 
           <div className="lg:col-span-2">
@@ -749,23 +720,6 @@ export default function PlaygroundPage() {
                     </pre>
                   </div>
                 </div>
-
-                {isTableField && (
-                  <div className="border rounded-lg p-4 bg-background">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold">Table Controls</h3>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setIsEditorOpen(true);
-                          setEditingRow(null);
-                        }}
-                      >
-                        Add Row
-                      </Button>
-                    </div>
-                  </div>
-                )}
               </TabsContent>
 
               <TabsContent value="code">

@@ -2,65 +2,18 @@
 
 import { callPost } from "@/lib/frappe-service";
 import { cn } from "@/lib/utils";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import * as React from "react";
 
-import { Autocomplete } from "./AutoComplete";
-import { Barcode } from "./Barcode";
-import { ButtonField } from "./Button";
-import { Check } from "./Check";
-import { Code } from "./Code";
-import { Color } from "./Color";
-import { Currency } from "./Currency";
-import { Data } from "./Data";
-import { Date } from "./Date";
-import { Datetime } from "./Datetime";
-import { Duration } from "./Duration";
-import { DynamicLink } from "./DynamicLink";
-import { Float } from "./Float";
-import { Geolocation } from "./Geolocation";
-import { Icon } from "./Icon";
-import { Image } from "./Image";
-import { Int } from "./Int";
-import { JSON as JSONField } from "./JSON";
-import { LinkField } from "./LinkField";
-import { LongText } from "./LongText";
-import { MarkdownEditor } from "./MarkdownEditor";
-import { Password } from "./Password";
-import { Percent } from "./Percent";
-import { Phone } from "./Phone";
-import { Rating } from "./Rating";
-import { ReadOnly } from "./ReadOnly";
-import { Select } from "./Select";
-import { Signature } from "./Signature";
-import { SmallText } from "./SmallText";
-import { TableMultiSelect } from "./TableMultiSelect";
-import { Text } from "./Text";
-import { TextEditor } from "./TextEditor";
-import { Time } from "./Time";
-
-interface TableProps {
-  doctype: string;
-  value: any[];
-  onChange: (val: any[]) => void;
-  onBlur?: () => void;
-  className?: string;
-  disabled?: boolean;
-  required?: boolean;
-  label?: string;
-}
-
-interface DoctypeField {
-  fieldname: string;
-  label: string;
-  fieldtype: string;
-  in_list_view?: number;
-  options?: string;
-  reqd?: number;
-  default?: any;
-  placeholder?: string;
-  [key: string]: any;
-}
+import { renderCellField } from "./table/CellRenderer";
+import { RowEditModal } from "./table/RowEditModal";
+import {
+  STICKY_CELL_CLASS,
+  STICKY_RIGHT_CLASS,
+  STICKY_RIGHT_HEADER_CLASS,
+  getStickyStyle,
+} from "./table/stickyHelpers";
+import type { DoctypeField, TableProps } from "./table/types";
 
 export const Table = ({
   doctype,
@@ -71,10 +24,12 @@ export const Table = ({
   disabled = false,
   required = false,
   label,
+  stickyColumns = 1,
 }: TableProps) => {
   const [fields, setFields] = React.useState<DoctypeField[]>([]);
+  const [allFields, setAllFields] = React.useState<DoctypeField[]>([]);
   const [loading, setLoading] = React.useState(false);
-  const [docMeta, setDocMeta] = React.useState<any>(null);
+  const [editIndex, setEditIndex] = React.useState<number | null>(null);
 
   const { post: fetchDocType } = callPost("frappe.desk.form.load.getdoctype");
 
@@ -89,11 +44,11 @@ export const Table = ({
         });
         if (response && (response as any).docs && (response as any).docs[0]) {
           const docMeta = (response as any).docs[0];
-          setDocMeta(docMeta);
           const listFields = (docMeta.fields || []).filter(
             (f: any) => f.in_list_view === 1,
           );
           setFields(listFields);
+          setAllFields(docMeta.fields || []);
         }
       } catch (error) {
         console.error(error);
@@ -108,7 +63,7 @@ export const Table = ({
   const handleAddField = () => {
     const newRow = fields.reduce(
       (acc, field) => {
-        let defaultValue = "";
+        let defaultValue: any = "";
         switch (field.fieldtype) {
           case "Check":
             defaultValue = 0;
@@ -119,11 +74,6 @@ export const Table = ({
           case "Percent":
             defaultValue = 0;
             break;
-          case "Date":
-          case "Datetime":
-          case "Time":
-            defaultValue = "";
-            break;
           case "Select":
             defaultValue = field.options?.split("\n")[0] || "";
             break;
@@ -131,7 +81,7 @@ export const Table = ({
             defaultValue = [];
             break;
           default:
-            defaultValue = field.default || "";
+            defaultValue = field.default ?? "";
         }
         acc[field.fieldname] = defaultValue;
         return acc;
@@ -157,202 +107,20 @@ export const Table = ({
     onChange(updated);
   };
 
-  const renderField = (field: DoctypeField, row: any, rowIndex: number) => {
-    const commonProps = {
-      value: row[field.fieldname] || field.default || "",
-      onChange: (val: any) => handleCellChange(rowIndex, field.fieldname, val),
-      disabled: disabled || false,
-      required: field.reqd === 1,
-      label: "", // Set label to empty string
-      placeholder: field.placeholder,
-      className: "w-full",
-    };
-
-    switch (field.fieldtype) {
-      case "Autocomplete":
-        return (
-          <Autocomplete
-            {...commonProps}
-            options={field.options ? JSON.parse(field.options) : []}
-          />
-        );
-
-      case "Barcode":
-        return <Barcode {...commonProps} />;
-
-      case "Button":
-        return <ButtonField {...commonProps} label="" />;
-
-      case "Check":
-        return (
-          <Check
-            {...commonProps}
-            value={row[field.fieldname] || false}
-            onChange={(val: boolean) =>
-              handleCellChange(rowIndex, field.fieldname, val ? 1 : 0)
-            }
-          />
-        );
-
-      case "Code":
-        return <Code {...commonProps} language="javascript" rows={4} />;
-
-      case "Color":
-        return <Color {...commonProps} />;
-
-      case "Currency":
-        return (
-          <Currency
-            {...commonProps}
-            value={row[field.fieldname] || 0}
-            // currency={field.options || "$"}
-          />
-        );
-
-      case "Data":
-        return <Data {...commonProps} />;
-
-      case "Date":
-        return <Date {...commonProps} />;
-
-      case "Datetime":
-        return <Datetime {...commonProps} />;
-
-      case "Duration":
-        return <Duration {...commonProps} value={row[field.fieldname] || 0} />;
-
-      case "Dynamic Link":
-        return (
-          <DynamicLink
-            {...commonProps}
-            referenceDoctype={field.options}
-            doctype={field.options}
-          />
-        );
-
-      case "Float":
-        return <Float {...commonProps} value={row[field.fieldname] || 0} />;
-
-      case "Geolocation":
-        return (
-          <Geolocation {...commonProps} value={row[field.fieldname] || null} />
-        );
-
-      case "Heading":
-        return <Heading {...commonProps} level={2} />;
-
-      case "HTML":
-        return <HTML {...commonProps} content={field.options || ""} />;
-
-      case "HTML Editor":
-        return <HTMLEditor {...commonProps} rows={4} />;
-
-      case "Icon":
-        return <Icon {...commonProps} />;
-
-      case "Image":
-        return <Image {...commonProps} value={row[field.fieldname] || null} />;
-
-      case "Int":
-        return <Int {...commonProps} value={row[field.fieldname] || 0} />;
-
-      case "JSON":
-        return (
-          <JSONField {...commonProps} value={row[field.fieldname] || null} />
-        );
-
-      case "Link":
-        return (
-          <LinkField
-            {...commonProps}
-            doctype={field.options}
-            referenceDoctype={field.options}
-          />
-        );
-
-      case "Long Text":
-        return <LongText {...commonProps} rows={3} />;
-
-      case "Markdown Editor":
-        return <MarkdownEditor {...commonProps} rows={4} />;
-
-      case "Password":
-        return <Password {...commonProps} showStrength={false} />;
-
-      case "Percent":
-        return <Percent {...commonProps} value={row[field.fieldname] || 0} />;
-
-      case "Phone":
-        return <Phone {...commonProps} />;
-
-      case "Rating":
-        return <Rating {...commonProps} value={row[field.fieldname] || 0} />;
-
-      case "Read Only":
-        return <ReadOnly {...commonProps} />;
-
-      case "Select":
-        return (
-          <Select
-            {...commonProps}
-            options={
-              field.options?.split("\n").map((opt: string) => ({
-                label: opt.trim(),
-                value: opt.trim(),
-              })) || []
-            }
-          />
-        );
-
-      case "Signature":
-        return (
-          <Signature {...commonProps} value={row[field.fieldname] || null} />
-        );
-
-      case "Small Text":
-        return <SmallText {...commonProps} />;
-
-      case "Table MultiSelect":
-        return (
-          <TableMultiSelect
-            {...commonProps}
-            value={row[field.fieldname] || []}
-            options={
-              field.options?.split("\n").map((opt: string) => ({
-                label: opt.trim(),
-                value: opt.trim(),
-              })) || []
-            }
-          />
-        );
-
-      case "Text":
-        return <Text {...commonProps} />;
-
-      case "Text Editor":
-        return <TextEditor {...commonProps} rows={4} />;
-
-      case "Time":
-        return <Time {...commonProps} />;
-
-      default:
-        // Fallback to text input for unknown types
-        return (
-          <input
-            type="text"
-            disabled={disabled}
-            value={row[field.fieldname] || ""}
-            onChange={(e) =>
-              handleCellChange(rowIndex, field.fieldname, e.target.value)
-            }
-            className="w-full bg-transparent px-2 py-1 text-sm rounded-xs outline-none focus-visible:bg-muted/50 transition-colors"
-            // placeholder={`Enter ${field.label}...`}
-          />
-        );
-    }
+  const handleEditSave = (data: Record<string, any>) => {
+    if (editIndex === null) return;
+    const updated = value.map((row, i) => {
+      if (i === editIndex) {
+        return { ...data };
+      }
+      return row;
+    });
+    onChange(updated);
+    setEditIndex(null);
   };
 
   const displayLabel = label || doctype;
+  const stickyLeftCount = Math.min(stickyColumns, fields.length);
 
   return (
     <div
@@ -380,11 +148,19 @@ export const Table = ({
           <div className="overflow-x-auto w-full">
             <table className="w-full text-sm border-collapse text-left">
               <thead>
-                <tr className="border-b bg-muted/40 transition-colors">
-                  {fields.map((field) => (
+                <tr className="border-b bg-background transition-colors">
+                  {fields.map((field, fi) => (
                     <th
                       key={field.fieldname}
-                      className="h-10 px-3 text-left align-middle font-medium text-muted-foreground border-r last:border-r-0 min-w-[120px]"
+                      className={cn(
+                        "h-10 px-3 text-left align-middle font-medium text-muted-foreground border-r last:border-r-0 min-w-[120px]",
+                        fi < stickyLeftCount && STICKY_CELL_CLASS,
+                      )}
+                      style={
+                        fi < stickyLeftCount
+                          ? getStickyStyle(fi, stickyLeftCount)
+                          : undefined
+                      }
                     >
                       {field.label}
                       {field.reqd === 1 && (
@@ -394,11 +170,18 @@ export const Table = ({
                       )}
                     </th>
                   ))}
-                  <th className="h-10 w-12 px-3 text-center align-middle font-medium text-muted-foreground"></th>
+                  <th
+                    className={cn(
+                      "h-10 w-[88px] px-3 text-center align-middle font-medium text-muted-foreground",
+                      STICKY_RIGHT_HEADER_CLASS,
+                    )}
+                  >
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {value.length === 0 ? (
+                {!Array.isArray(value) || value.length === 0 ? (
                   <tr>
                     <td
                       colSpan={fields.length + 1}
@@ -413,23 +196,54 @@ export const Table = ({
                       key={rowIndex}
                       className="border-b last:border-b-0 hover:bg-muted/20 transition-colors"
                     >
-                      {fields.map((field) => (
+                      {fields.map((field, fi) => (
                         <td
                           key={field.fieldname}
-                          className="p-1 border-r last:border-r-0 align-middle"
+                          className={cn(
+                            "p-1 border-r last:border-r-0 align-middle",
+                            fi < stickyLeftCount && STICKY_CELL_CLASS,
+                          )}
+                          style={
+                            fi < stickyLeftCount
+                              ? getStickyStyle(fi, stickyLeftCount)
+                              : undefined
+                          }
                         >
-                          {renderField(field, row, rowIndex)}
+                          {renderCellField(
+                            field,
+                            row,
+                            rowIndex,
+                            disabled,
+                            handleCellChange,
+                          )}
                         </td>
                       ))}
-                      <td className="p-1 text-center align-middle">
-                        <button
-                          type="button"
-                          disabled={disabled}
-                          onClick={() => handleRemoveField(rowIndex)}
-                          className="p-1.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md transition-colors disabled:opacity-50"
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
+                      <td
+                        className={cn(
+                          "p-1 text-center align-middle",
+                          STICKY_RIGHT_CLASS,
+                        )}
+                      >
+                        <div className="flex items-center justify-center gap-0.5">
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => setEditIndex(rowIndex)}
+                            className="p-1.5 hover:bg-primary/10 text-muted-foreground hover:text-primary rounded-md transition-colors disabled:opacity-50"
+                            title="Edit row"
+                          >
+                            <Pencil className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => handleRemoveField(rowIndex)}
+                            className="p-1.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md transition-colors disabled:opacity-50"
+                            title="Delete row"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -451,6 +265,21 @@ export const Table = ({
           </div>
         </div>
       )}
+
+      {/* Row Edit Modal */}
+      {editIndex !== null && value[editIndex] && (
+        <RowEditModal
+          open={editIndex !== null}
+          onOpenChange={(open) => {
+            if (!open) setEditIndex(null);
+          }}
+          rowData={value[editIndex]}
+          allFields={allFields}
+          onSave={handleEditSave}
+        />
+      )}
     </div>
   );
 };
+
+export default Table;
