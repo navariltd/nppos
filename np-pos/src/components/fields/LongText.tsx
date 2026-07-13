@@ -1,6 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 interface LongTextProps {
   value: string;
@@ -32,16 +34,12 @@ export const LongText = ({
   return (
     <div className={cn("w-full flex flex-col gap-1.5", className)}>
       {label && (
-        <label className="text-sm font-medium text-foreground flex items-center gap-0.5 select-none">
+        <Label className="flex items-center gap-0.5 select-none">
           {label}
-          {required && (
-            <span className="text-destructive font-bold text-red-500 ml-0.5">
-              *
-            </span>
-          )}
-        </label>
+          {required && <span className="text-destructive ml-0.5">*</span>}
+        </Label>
       )}
-      <textarea
+      <Textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
@@ -49,10 +47,6 @@ export const LongText = ({
         placeholder={placeholder}
         rows={rows}
         maxLength={maxLength || length}
-        className={cn(
-          "w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-          className,
-        )}
       />
     </div>
   );

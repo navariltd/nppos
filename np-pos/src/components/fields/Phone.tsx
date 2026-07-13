@@ -1,6 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import * as React from "react";
 
 interface PhoneProps {
@@ -57,32 +59,25 @@ export const Phone = ({
   return (
     <div className={cn("w-full flex flex-col gap-1.5", className)}>
       {label && (
-        <label className="text-sm font-medium text-foreground flex items-center gap-0.5 select-none">
+        <Label className="flex items-center gap-0.5 select-none">
           {label}
-          {required && (
-            <span className="text-destructive font-bold text-red-500 ml-0.5">
-              *
-            </span>
-          )}
-        </label>
+          {required && <span className="text-destructive ml-0.5">*</span>}
+        </Label>
       )}
       <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground z-10">
           {countryCode}
         </span>
-        <input
+        <Input
           type="tel"
           value={value}
           onChange={handleChange}
           onBlur={onBlur}
           disabled={disabled}
-        placeholder={placeholder}
-        maxLength={length}
-        className={cn(
-          "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 pl-12 text-sm shadow-xs transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-          className,
-        )}
-      />
+          placeholder={placeholder}
+          maxLength={length}
+          className={cn("pl-12", className)}
+        />
       </div>
     </div>
   );
