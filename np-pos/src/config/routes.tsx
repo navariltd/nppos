@@ -18,6 +18,7 @@ const CashVouchers = lazy(() => import("@/app/pos/cash-vouchers/page"));
 const AtmCard = lazy(() => import("@/app/pos/atm-card/page"));
 const TransactionHistory = lazy(() => import("@/app/pos/transactions/page"));
 const GoodsHampers = lazy(() => import("@/app/pos/goods-hampers/page"));
+const Playground = lazy(() => import("@/app/pos/playground/page"));
 
 const UserSettings = lazy(() => import("@/app/settings/user/page"));
 const AccountSettings = lazy(() => import("@/app/settings/account/page"));
@@ -90,6 +91,14 @@ export const routes: RouteConfig[] = [
     element: (
       <ProtectedRoute>
         <TransactionHistory />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/pos/playground",
+    element: (
+      <ProtectedRoute>
+        <Playground />
       </ProtectedRoute>
     ),
   },

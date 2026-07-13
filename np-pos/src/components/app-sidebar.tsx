@@ -3,6 +3,7 @@
 import { Logo } from "@/components/logo";
 import {
   Banknote,
+  Code2,
   CreditCard,
   History,
   LayoutDashboard,
@@ -68,6 +69,16 @@ const privateNavGroups = [
         title: "Users",
         url: "/users",
         icon: User,
+      },
+    ],
+  },
+  {
+    label: "Development",
+    items: [
+      {
+        title: "Field Playground",
+        url: "/pos/playground",
+        icon: Code2,
       },
     ],
   },
@@ -157,7 +168,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         {isAuthenticated ? (
-          <NavUser user={user} onLogout={logout} />
+          <NavUser user={user} />
         ) : (
           <div className="p-2">
             <Link
