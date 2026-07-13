@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { BaseLayout } from "@/components/layouts/base-layout";
-import { FrappeField } from "@/components/fields";
 import type { FrappeFieldMeta } from "@/components/fields";
+import { FrappeField, LinkField } from "@/components/fields";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -15,22 +15,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { clearPageState, usePageState } from "@/hooks/use-page-state";
 import { callPost } from "@/lib/frappe-service";
 import {
-  Play,
-  Settings,
   Code,
   Eye,
-  RefreshCw,
-  Table2,
   FileText,
+  Loader2,
+  Play,
+  RefreshCw,
+  Settings,
+  Table2,
 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 
-// Available field types for testing
 const FIELD_TYPES = [
   "Data",
   "Text",
@@ -71,35 +73,6 @@ const FIELD_TYPES = [
   "Fold",
   "Heading",
 ];
-
-// Sample doctypes for testing - will be filtered based on field type
-const ALL_DOCTYPES = [
-  "Customer",
-  "Supplier",
-  "Item",
-  "Sales Invoice",
-  "Purchase Order",
-  "Stock Entry",
-  "Payment Entry",
-  "Journal Entry",
-  "Sales Invoice Item",
-  "Purchase Order Item",
-  "Stock Entry Detail",
-  "Payment Entry Deduction",
-  "Journal Entry Account",
-];
-
-// Child doctypes (Table/Table MultiSelect fields) - these have is_child_table = 1
-const CHILD_DOCTYPES = [
-  "Sales Invoice Item",
-  "Purchase Order Item",
-  "Stock Entry Detail",
-  "Payment Entry Deduction",
-  "Journal Entry Account",
-];
-
-// Non-child doctypes (Link fields) - these have is_child_table = 0
-const PARENT_DOCTYPES = ALL_DOCTYPES.filter(dt => !CHILD_DOCTYPES.includes(dt));
 
 interface FieldConfig {
   fieldname: string;
@@ -155,7 +128,13 @@ const TableRowEditor = ({
       if (response && (response as any).docs && (response as any).docs[0]) {
         const docMeta = (response as any).docs[0];
         const formFields = (docMeta.fields || [])
-          .filter((f: any) => !f.hidden && f.fieldtype !== "Section Break" && f.fieldtype !== "Column Break" && f.fieldtype !== "Table")
+          .filter(
+            (f: any) =>
+              !f.hidden &&
+              f.fieldtype !== "Section Break" &&
+              f.fieldtype !== "Column Break" &&
+              f.fieldtype !== "Table",
+          )
           .map((f: any) => ({
             fieldname: f.fieldname,
             label: f.label,
@@ -168,7 +147,7 @@ const TableRowEditor = ({
         setFields(formFields);
       }
     } catch (error) {
-      console.error("Error loading doctype meta:", error);
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -193,7 +172,10 @@ const TableRowEditor = ({
           <div className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
             <h3 className="text-lg font-semibold">
-              {rowData && Object.keys(rowData).length > 0 ? "Edit Row" : "Add Row"} - {doctype}
+              {rowData && Object.keys(rowData).length > 0
+                ? "Edit Row"
+                : "Add Row"}{" "}
+              - {doctype}
             </h3>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
@@ -237,79 +219,129 @@ const TableRowEditor = ({
           </div>
         </div>
       </div>
-    </div>
+    </div> 
   );
 };
 
 export default function PlaygroundPage() {
-  const [selectedFieldType, setSelectedFieldType] = useState<string>("Data");
-  const [fieldConfig, setFieldConfig] = useState<FieldConfig>({
-    fieldname: "test_field",
-    label: "Test Field",
-    fieldtype: "Data",
-    placeholder: "Enter value...",
-  });
-  const [fieldValue, setFieldValue] = useState<any>("");
-  const [activeTab, setActiveTab] = useState("preview");
-  const [doctypeData, setDoctypeData] = useState<Record<string, any>[]>([]);
-  const [tableValue, setTableValue] = useState<Record<string, any>[]>([]);
-  const [editingRow, setEditingRow] = useState<Record<string, any> | null>(null);
+  const location = useLocation();
+  const [selectedFieldType, setSelectedFieldType] = usePageState<string>(
+    "selectedFieldType",
+    "Data",
+  );
+  const [fieldConfig, setFieldConfig] = usePageState<FieldConfig>(
+    "fieldConfig",
+    {
+      fieldname: "test_field",
+      label: "Test Field",
+      fieldtype: "Data",
+      placeholder: "Enter value...",
+    },
+  );
+  const [fieldValue, setFieldValue] = usePageState<any>("fieldValue", "");
+  const [activeTab, setActiveTab] = usePageState("activeTab", "preview");
+  const [tableValue, setTableValue] = usePageState<Record<string, any>[]>(
+    "tableValue",
+    [],
+  );
+  const [editingRow, setEditingRow] = useState<Record<string, any> | null>(
+    null,
+  );
   const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [loadingDoctype, setLoadingDoctype] = useState(false);
-  const [tableMultiSelectLinkField, setTableMultiSelectLinkField] = useState<string>("");
+  const [tableMultiSelectLinkField, setTableMultiSelectLinkField] =
+    usePageState<string>("tableMultiSelectLinkField", "");
 
-  // Update field config when type changes
+  const [parentDoctypes, setParentDoctypes] = usePageState<string[]>(
+    "parentDoctypes",
+    [],
+  );
+  const [childDoctypes, setChildDoctypes] = usePageState<string[]>(
+    "childDoctypes",
+    [],
+  );
+  const [loadingDoctypes, setLoadingDoctypes] = useState(false);
+  const [doctypesLoaded, setDoctypesLoaded] = usePageState(
+    "doctypesLoaded",
+    false,
+  );
+
+  const { post: getList } = callPost("frappe.client.get_list");
+
+  const fetchDoctypes = useCallback(
+    async (istable: number): Promise<string[]> => {
+      try {
+        const response = await getList({
+          doctype: "DocType",
+          fields: ["name"],
+          filters: [["istable", "=", istable]],
+          limit_page_length: 100,
+          order_by: "name asc",
+        });
+        const data = (response as any)?.message || response;
+        if (Array.isArray(data)) {
+          return data.map((d: any) => d.name);
+        }
+        return [];
+      } catch (error) {
+        console.error(error);
+        return [];
+      }
+    },
+    [getList],
+  );
+
+  const loadDoctypes = useCallback(async () => {
+    if (doctypesLoaded) return;
+    setLoadingDoctypes(true);
+    try {
+      const [parents, children] = await Promise.all([
+        fetchDoctypes(0),
+        fetchDoctypes(1),
+      ]);
+      setParentDoctypes(parents);
+      setChildDoctypes(children);
+      setDoctypesLoaded(true);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoadingDoctypes(false);
+    }
+  }, [fetchDoctypes, doctypesLoaded]);
+
+  useEffect(() => {
+    loadDoctypes();
+  }, [loadDoctypes]);
+
   useEffect(() => {
     let defaultOptions = fieldConfig.options;
-    
-    // Set smart defaults based on field type
-    if (selectedFieldType === "Select") {
-      defaultOptions = "Option 1\nOption 2\nOption 3";
-    } else if (selectedFieldType === "Link") {
-      defaultOptions = "Customer"; // Default to first parent doctype
-    } else if (selectedFieldType === "Table") {
-      defaultOptions = "Sales Invoice Item"; // Default to first child doctype
-    } else if (selectedFieldType === "Table MultiSelect") {
-      defaultOptions = "Customer"; // Default to parent doctype (to get link field from)
-    } else if (selectedFieldType === "Dynamic Link") {
-      defaultOptions = "Customer"; // Default to parent doctype
-    } else if (selectedFieldType === "Autocomplete") {
-      defaultOptions = "Customer";
-    }
-    
-    setFieldConfig({
-      ...fieldConfig,
-      fieldtype: selectedFieldType,
-      options: defaultOptions,
-    });
-  }, [selectedFieldType]);
+    const fieldType = selectedFieldType;
 
-  // Fetch link field for Table MultiSelect when doctype changes
+    if (fieldType === "Select") {
+      defaultOptions = "Option 1\nOption 2\nOption 3";
+    } else if (
+      fieldType === "Link" ||
+      fieldType === "Dynamic Link" ||
+      fieldType === "Autocomplete"
+    ) {
+      defaultOptions = parentDoctypes.length > 0 ? parentDoctypes[0] : "";
+    } else if (fieldType === "Table" || fieldType === "Table MultiSelect") {
+      defaultOptions = childDoctypes.length > 0 ? childDoctypes[0] : "";
+    }
+
+    setFieldConfig((prev) => ({
+      ...prev,
+      fieldtype: fieldType,
+      options: defaultOptions || prev.options,
+    }));
+  }, [selectedFieldType, parentDoctypes, childDoctypes]);
+
   useEffect(() => {
     if (selectedFieldType === "Table MultiSelect" && fieldConfig.options) {
       fetchLinkFieldForDoctype(fieldConfig.options);
     } else if (selectedFieldType !== "Table MultiSelect") {
-      // Clear link field when not using Table MultiSelect
       setTableMultiSelectLinkField("");
     }
   }, [selectedFieldType, fieldConfig.options]);
-
-  // Get filtered doctypes based on field type
-  const getFilteredDoctypes = () => {
-    switch (selectedFieldType) {
-      case "Link":
-      case "Autocomplete":
-      case "Dynamic Link":
-        // Link fields should only show parent doctypes (is_child_table = 0)
-        return PARENT_DOCTYPES;
-      case "Table":
-      case "Table MultiSelect":
-        // Table fields should only show child doctypes (is_child_table = 1)
-        return CHILD_DOCTYPES;
-      default:
-        return ALL_DOCTYPES;
-    }
-  };
 
   const fetchLinkFieldForDoctype = async (doctype: string) => {
     try {
@@ -317,73 +349,34 @@ export default function PlaygroundPage() {
       const response = await post({ doctype, with_parent: 0 });
       if (response && (response as any).docs && (response as any).docs[0]) {
         const docMeta = (response as any).docs[0];
-        // Find the first Link field in the doctype
         const linkField = (docMeta.fields || []).find(
-          (f: any) => f.fieldtype === "Link" && !f.hidden
+          (f: any) => f.fieldtype === "Link" && !f.hidden,
         );
         if (linkField) {
           setTableMultiSelectLinkField(linkField.fieldname);
         }
       }
     } catch (error) {
-      console.error("Error fetching link field:", error);
-    }
-  };
-
-  const loadDoctypeData = async (doctype: string) => {
-    setLoadingDoctype(true);
-    try {
-      const { post } = callPost("frappe.desk.search.search_link");
-      const response = await post({
-        txt: "",
-        doctype,
-        page_length: 10,
-      });
-      const message = (response as any)?.message || [];
-      setDoctypeData(message.slice(0, 10));
-    } catch (error) {
-      console.error("Error loading doctype data:", error);
-    } finally {
-      setLoadingDoctype(false);
-    }
-  };
-
-  const handleTableRowAdd = () => {
-    setIsEditorOpen(true);
-    setEditingRow(null);
-  };
-
-  const handleTableRowEdit = (row: Record<string, any>) => {
-    setEditingRow(row);
-    setIsEditorOpen(true);
-  };
-
-  const handleTableRowSave = (data: Record<string, any>) => {
-    if (editingRow && Object.keys(editingRow).length > 0) {
-      // Update existing row
-      setTableValue((prev) =>
-        prev.map((row, index) => (row === editingRow ? data : row))
-      );
-    } else {
-      // Add new row
-      setTableValue((prev) => [...prev, data]);
-    }
-    setIsEditorOpen(false);
-    setEditingRow(null);
-  };
-
-  const handleTableRowDelete = () => {
-    if (editingRow) {
-      setTableValue((prev) => prev.filter((row) => row !== editingRow));
-      setIsEditorOpen(false);
-      setEditingRow(null);
+      console.error(error);
     }
   };
 
   const resetPlayground = () => {
+    clearPageState(location.pathname);
     setFieldValue("");
     setTableValue([]);
-    setDoctypeData([]);
+    setParentDoctypes([]);
+    setChildDoctypes([]);
+    setDoctypesLoaded(false);
+    setSelectedFieldType("Data");
+    setFieldConfig({
+      fieldname: "test_field",
+      label: "Test Field",
+      fieldtype: "Data",
+      placeholder: "Enter value...",
+    });
+    setActiveTab("preview");
+    setTableMultiSelectLinkField("");
   };
 
   const getFieldTypeDescription = (type: string): string => {
@@ -398,8 +391,8 @@ export default function PlaygroundPage() {
       Percent: "Percentage input",
       Check: "Boolean checkbox",
       Select: "Dropdown selection",
-      Link: "Link to another DocType",
-      "Dynamic Link": "Dynamic link based on another field",
+      Link: "Link to another DocType (istable == 0)",
+      "Dynamic Link": "Dynamic link based on another field (istable == 0)",
       Date: "Date picker",
       Datetime: "Date and time picker",
       Time: "Time picker",
@@ -421,9 +414,9 @@ export default function PlaygroundPage() {
       JSON: "JSON editor",
       "Read Only": "Read-only display",
       Button: "Action button",
-      Autocomplete: "Autocomplete with search",
-      Table: "Child table with multiple rows",
-      "Table MultiSelect": "Multi-select table (uses first Link field)",
+      Autocomplete: "Autocomplete with search (istable == 0)",
+      Table: "Child table (istable == 1) with multiple rows",
+      "Table MultiSelect": "Multi-select table (istable == 1)",
       Fold: "Collapsible section",
       Heading: "Section heading",
     };
@@ -442,21 +435,46 @@ export default function PlaygroundPage() {
     };
 
     if (fieldConfig.options) {
-      // For Table MultiSelect, append the link field to options
-      if (fieldConfig.fieldtype === "Table MultiSelect" && tableMultiSelectLinkField) {
-        base.options = `${fieldConfig.options}\n${tableMultiSelectLinkField}`;
-      } else {
-        base.options = fieldConfig.options;
-      }
+      base.options = fieldConfig.options;
+    }
+
+    if (fieldConfig.required) base.reqd = true;
+    if (fieldConfig.read_only) base.read_only = true;
+
+    if (
+      ["Int", "Float", "Currency", "Percent"].includes(fieldConfig.fieldtype)
+    ) {
+      base.min_value = 0;
+      base.max_value = fieldConfig.fieldtype === "Percent" ? 100 : 100000;
+      base.non_negative = true;
+    }
+
+    if (
+      ["Data", "Small Text", "Long Text", "Text"].includes(
+        fieldConfig.fieldtype,
+      )
+    ) {
+      base.length = 140;
     }
 
     return base;
   };
 
+  const isLinkField =
+    selectedFieldType === "Link" ||
+    selectedFieldType === "Dynamic Link" ||
+    selectedFieldType === "Autocomplete";
+  const isTableField =
+    selectedFieldType === "Table" || selectedFieldType === "Table MultiSelect";
+  const currentDoctypes = isTableField
+    ? childDoctypes
+    : isLinkField
+      ? parentDoctypes
+      : [];
+
   return (
-    <BaseLayout title="Field Playground" description="Test and preview Frappe field components">
-      <div className="container mx-auto p-6 space-y-6">
-        {/* Header */}
+    <div className="px-4 lg:px-6">
+      <div className="container mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">FrappeField Playground</h1>
@@ -471,7 +489,6 @@ export default function PlaygroundPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Configuration Panel */}
           <div className="lg:col-span-1 space-y-4">
             <div className="border rounded-lg p-4 space-y-4 bg-background">
               <div className="flex items-center gap-2">
@@ -481,7 +498,6 @@ export default function PlaygroundPage() {
 
               <Separator />
 
-              {/* Field Type Selector */}
               <div className="space-y-2">
                 <Label htmlFor="fieldtype">Field Type</Label>
                 <Select
@@ -506,33 +522,36 @@ export default function PlaygroundPage() {
                 </p>
               </div>
 
-              {/* Fieldname */}
               <div className="space-y-2">
                 <Label htmlFor="fieldname">Fieldname</Label>
                 <Input
                   id="fieldname"
                   value={fieldConfig.fieldname}
                   onChange={(e) =>
-                    setFieldConfig((prev) => ({ ...prev, fieldname: e.target.value }))
+                    setFieldConfig((prev) => ({
+                      ...prev,
+                      fieldname: e.target.value,
+                    }))
                   }
                   placeholder="field_name"
                 />
               </div>
 
-              {/* Label */}
               <div className="space-y-2">
                 <Label htmlFor="label">Label</Label>
                 <Input
                   id="label"
                   value={fieldConfig.label}
                   onChange={(e) =>
-                    setFieldConfig((prev) => ({ ...prev, label: e.target.value }))
+                    setFieldConfig((prev) => ({
+                      ...prev,
+                      label: e.target.value,
+                    }))
                   }
                   placeholder="Field Label"
                 />
               </div>
 
-              {/* Options (for Select, Link, Table, etc.) */}
               {(selectedFieldType === "Select" ||
                 selectedFieldType === "Link" ||
                 selectedFieldType === "Table" ||
@@ -541,221 +560,143 @@ export default function PlaygroundPage() {
                 selectedFieldType === "Dynamic Link") && (
                 <div className="space-y-2">
                   <Label htmlFor="options">
-                    {selectedFieldType === "Table"
-                      ? "Child Table DocType (is_child_table = 1)"
-                      : selectedFieldType === "Table MultiSelect"
-                      ? "Parent DocType (is_child_table = 0)"
+                    {selectedFieldType === "Table" ||
+                    selectedFieldType === "Table MultiSelect"
+                      ? "Child DocType (istable == 1)"
                       : selectedFieldType === "Select"
-                      ? "Options (one per line)"
-                      : "Link (is_child_table = 0)"}
+                        ? "Options (one per line)"
+                        : "Parent DocType (istable == 0)"}
                   </Label>
-                  {selectedFieldType === "Table" ? (
-                    // Table: Select child doctype (is_child_table = 1)
-                    <Select
-                      value={fieldConfig.options}
-                      onValueChange={(value) =>
-                        setFieldConfig((prev) => ({ ...prev, options: value }))
+                  {isLinkField || isTableField ? (
+                    <LinkField
+                      doctype={"DocType"}
+                      value={fieldConfig.options || ""}
+                      onChange={(value) => {
+                        setFieldConfig((prev) => ({
+                          ...prev,
+                          options: value,
+                        }));
+                      }}
+                      filters={
+                        isTableField
+                          ? { istable: 1 }
+                          : { istable: 0 }
                       }
-                    >
-                      <SelectTrigger id="options">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CHILD_DOCTYPES.map((dt) => (
-                          <SelectItem key={dt} value={dt}>
-                            {dt}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : selectedFieldType === "Table MultiSelect" ? (
-                    // Table MultiSelect: Select parent doctype (is_child_table = 0)
-                    <div className="space-y-2">
-                      <Select
-                        value={fieldConfig.options}
-                        onValueChange={(value) => {
-                          setFieldConfig((prev) => ({ ...prev, options: value }));
-                          setTableMultiSelectLinkField(""); // Reset link field when doctype changes
-                        }}
-                      >
-                        <SelectTrigger id="options">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PARENT_DOCTYPES.map((dt) => (
-                            <SelectItem key={dt} value={dt}>
-                              {dt}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {tableMultiSelectLinkField && (
-                        <div className="p-2 bg-muted/50 rounded border">
-                          <p className="text-xs text-muted-foreground">
-                            Link field: <code className="bg-background px-1 rounded font-mono">{tableMultiSelectLinkField}</code>
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            This field will be used to select multiple records
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ) : selectedFieldType === "Select" ? (
+                    />
+                  ) : (
                     <Textarea
                       id="options"
                       value={fieldConfig.options}
                       onChange={(e) =>
-                        setFieldConfig((prev) => ({ ...prev, options: e.target.value }))
+                        setFieldConfig((prev) => ({
+                          ...prev,
+                          options: e.target.value,
+                        }))
                       }
                       placeholder="Option 1\nOption 2\nOption 3"
                       rows={4}
                     />
-                  ) : (
-                    // Link, Autocomplete, Dynamic Link: Select parent doctype (is_child_table = 0)
-                    <Select
-                      value={fieldConfig.options}
-                      onValueChange={(value) =>
-                        setFieldConfig((prev) => ({ ...prev, options: value }))
-                      }
-                    >
-                      <SelectTrigger id="options">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PARENT_DOCTYPES.map((dt) => (
-                          <SelectItem key={dt} value={dt}>
-                            {dt}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   )}
-                  {selectedFieldType === "Table" && (
-                    <p className="text-xs text-muted-foreground">
-                      Select a child doctype (is_child_table = 1)
-                    </p>
-                  )}
-                  {selectedFieldType === "Table MultiSelect" && (
-                    <p className="text-xs text-muted-foreground">
-                      Select a parent doctype (is_child_table = 0). The first Link field will be used for multi-select
-                    </p>
-                  )}
-                  {(selectedFieldType === "Link" || selectedFieldType === "Autocomplete" || selectedFieldType === "Dynamic Link") && (
-                    <p className="text-xs text-muted-foreground">
-                      Select a parent doctype (is_child_table = 0)
-                    </p>
-                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {isTableField &&
+                      'Child doctypes have istable == 1 (fetched via frappe.client.get_list with filter ["istable", "=", 1])'}
+                    {isLinkField &&
+                      'Parent doctypes have istable == 0 (fetched via frappe.client.get_list with filter ["istable", "=", 0])'}
+                    {selectedFieldType === "Select" &&
+                      "Enter each option on a new line"}
+                  </p>
                 </div>
               )}
 
-              {/* Placeholder */}
+              {selectedFieldType === "Table MultiSelect" &&
+                tableMultiSelectLinkField && (
+                  <div className="p-2 bg-muted/50 rounded border">
+                    <p className="text-xs text-muted-foreground">
+                      Link field:{" "}
+                      <code className="bg-background px-1 rounded font-mono">
+                        {tableMultiSelectLinkField}
+                      </code>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      The first Link field in the child doctype is used for
+                      multi-select
+                    </p>
+                  </div>
+                )}
+
               <div className="space-y-2">
                 <Label htmlFor="placeholder">Placeholder</Label>
                 <Input
                   id="placeholder"
                   value={fieldConfig.placeholder}
                   onChange={(e) =>
-                    setFieldConfig((prev) => ({ ...prev, placeholder: e.target.value }))
+                    setFieldConfig((prev) => ({
+                      ...prev,
+                      placeholder: e.target.value,
+                    }))
                   }
                   placeholder="Enter placeholder text..."
                 />
               </div>
 
-              {/* Description */}
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
                 <Textarea
                   id="description"
                   value={fieldConfig.description}
                   onChange={(e) =>
-                    setFieldConfig((prev) => ({ ...prev, description: e.target.value }))
+                    setFieldConfig((prev) => ({
+                      ...prev,
+                      description: e.target.value,
+                    }))
                   }
                   placeholder="Field description..."
                   rows={2}
                 />
               </div>
 
-              {/* Checkboxes */}
-              <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="required"
                     checked={fieldConfig.required}
-                    onChange={(e) =>
-                      setFieldConfig((prev) => ({ ...prev, required: e.target.checked }))
+                    onCheckedChange={(checked) =>
+                      setFieldConfig((prev) => ({
+                        ...prev,
+                        required: checked === true,
+                      }))
                     }
-                    className="rounded"
                   />
-                  <span className="text-sm">Required</span>
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
+                  <Label htmlFor="required" className="text-sm cursor-pointer">
+                    Required
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="read_only"
                     checked={fieldConfig.read_only}
-                    onChange={(e) =>
-                      setFieldConfig((prev) => ({ ...prev, read_only: e.target.checked }))
+                    onCheckedChange={(checked) =>
+                      setFieldConfig((prev) => ({
+                        ...prev,
+                        read_only: checked === true,
+                      }))
                     }
-                    className="rounded"
                   />
-                  <span className="text-sm">Read Only</span>
-                </label>
+                  <Label htmlFor="read_only" className="text-sm cursor-pointer">
+                    Read Only
+                  </Label>
+                </div>
               </div>
             </div>
 
-            {/* Doctype Data Preview */}
-            {(selectedFieldType === "Link" || selectedFieldType === "Autocomplete") &&
-              fieldConfig.options && (
-                <div className="border rounded-lg p-4 space-y-3 bg-background">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Table2 className="h-5 w-5" />
-                      <h3 className="font-semibold">Sample Data: {fieldConfig.options}</h3>
-                      {CHILD_DOCTYPES.includes(fieldConfig.options) && (
-                        <Badge variant="outline" className="text-xs">Child DocType</Badge>
-                      )}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => loadDoctypeData(fieldConfig.options!)}
-                      disabled={loadingDoctype}
-                    >
-                      {loadingDoctype ? (
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                      ) : (
-                        "Load"
-                      )}
-                    </Button>
-                  </div>
-                  <ScrollArea className="h-[200px]">
-                    <div className="space-y-1">
-                      {doctypeData.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="p-2 text-sm border rounded hover:bg-accent cursor-pointer"
-                        >
-                          <div className="font-medium">{item.label || item.value}</div>
-                          {item.description && (
-                            <div className="text-xs text-muted-foreground">
-                              {item.description}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                      {doctypeData.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          Click "Load" to fetch sample data from {fieldConfig.options}
-                        </p>
-                      )}
-                    </div>
-                  </ScrollArea>
-                </div>
-              )}
           </div>
 
-          {/* Preview Panel */}
           <div className="lg:col-span-2">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <Tabs
+              value={activeTab}
+              onValueChange={setActiveTab}
+              className="w-full"
+            >
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="preview">
                   <Eye className="h-4 w-4 mr-2" />
@@ -777,24 +718,54 @@ export default function PlaygroundPage() {
 
                   <Separator className="mb-6" />
 
-                  {/* Field Preview */}
                   <div className="max-w-2xl">
                     <FrappeField
                       field={buildFieldMeta()}
-                      value={fieldValue}
-                      onChange={(val) => setFieldValue(val)}
+                      value={isTableField ? tableValue : fieldValue}
+                      onChange={(val) => {
+                        if (isTableField) {
+                          setTableValue(val || []);
+                        } else {
+                          setFieldValue(val);
+                        }
+                      }}
                       doctype={fieldConfig.options}
+                      linkFieldname={
+                        isTableField ? tableMultiSelectLinkField : undefined
+                      }
                     />
                   </div>
 
-                  {/* Current Value Display */}
                   <div className="mt-6 p-4 bg-muted/20 rounded-lg">
-                    <Label className="text-sm font-medium">Current Value:</Label>
+                    <Label className="text-sm font-medium">
+                      Current Value:
+                    </Label>
                     <pre className="mt-2 text-xs bg-background p-3 rounded border overflow-auto">
-                      {JSON.stringify(fieldValue, null, 2)}
+                      {JSON.stringify(
+                        isTableField ? tableValue : fieldValue,
+                        null,
+                        2,
+                      )}
                     </pre>
                   </div>
                 </div>
+
+                {isTableField && (
+                  <div className="border rounded-lg p-4 bg-background">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold">Table Controls</h3>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setIsEditorOpen(true);
+                          setEditingRow(null);
+                        }}
+                      >
+                        Add Row
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="code">
@@ -808,7 +779,7 @@ const field: FrappeFieldMeta = ${JSON.stringify(buildFieldMeta(), null, 2)};
 
 <FrappeField
   field={field}
-  value={${JSON.stringify(fieldValue)}}
+  value={${JSON.stringify(isTableField ? tableValue : fieldValue)}}
   onChange={(value, fieldname) => {
     console.log("Value changed:", value, fieldname);
   }}
@@ -825,7 +796,6 @@ const field: FrappeFieldMeta = ${JSON.stringify(buildFieldMeta(), null, 2)};
         </div>
       </div>
 
-      {/* Table Row Editor Modal */}
       <TableRowEditor
         isOpen={isEditorOpen}
         onClose={() => {
@@ -834,9 +804,31 @@ const field: FrappeFieldMeta = ${JSON.stringify(buildFieldMeta(), null, 2)};
         }}
         doctype={fieldConfig.options || ""}
         rowData={editingRow || {}}
-        onSave={handleTableRowSave}
-        onDelete={editingRow ? handleTableRowDelete : undefined}
+        onSave={(data) => {
+          if (editingRow && Object.keys(editingRow).length > 0) {
+            setTableValue((prev) =>
+              prev.map((row, index) => (row === editingRow ? data : row)),
+            );
+          } else {
+            setTableValue((prev) => [...prev, data]);
+          }
+          setIsEditorOpen(false);
+          setEditingRow(null);
+        }}
+        onDelete={
+          editingRow
+            ? () => {
+                if (editingRow) {
+                  setTableValue((prev) =>
+                    prev.filter((row) => row !== editingRow),
+                  );
+                  setIsEditorOpen(false);
+                  setEditingRow(null);
+                }
+              }
+            : undefined
+        }
       />
-    </BaseLayout>
+    </div>
   );
 }
