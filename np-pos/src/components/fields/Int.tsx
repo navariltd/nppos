@@ -15,6 +15,9 @@ interface IntProps {
   min?: number;
   max?: number;
   step?: number;
+  nonNegative?: boolean;
+  precision?: number;
+  length?: number;
 }
 
 export const Int = ({
@@ -29,21 +32,36 @@ export const Int = ({
   min = -Infinity,
   max = Infinity,
   step = 1,
+  nonNegative = false,
+  precision,
+  length,
 }: IntProps) => {
   const [displayValue, setDisplayValue] = React.useState(
     value !== 0 ? value.toString() : "",
   );
 
+  const effectiveMin = nonNegative ? Math.max(min, 0) : min;
+  const effectiveMax = max;
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    setDisplayValue(val);
+    
+    // Strict validation: only allow empty string, minus sign, or valid integer
     if (val === "" || val === "-") {
+      setDisplayValue(val);
       onChange(0);
       return;
     }
-    const num = parseInt(val);
+    
+    // Only allow digits (no decimals, no letters, no special chars)
+    if (!/^-?\d+$/.test(val)) {
+      return; // Reject invalid input
+    }
+    
+    const num = parseInt(val, 10);
     if (!isNaN(num)) {
-      const clamped = Math.min(Math.max(num, min), max);
+      const clamped = Math.min(Math.max(num, effectiveMin), effectiveMax);
+      setDisplayValue(clamped.toString());
       onChange(clamped);
     }
   };
@@ -52,7 +70,7 @@ export const Int = ({
     if (displayValue) {
       const num = parseInt(displayValue);
       if (!isNaN(num)) {
-        const clamped = Math.min(Math.max(num, min), max);
+        const clamped = Math.min(Math.max(num, effectiveMin), effectiveMax);
         setDisplayValue(clamped.toString());
         onChange(clamped);
       }
@@ -80,6 +98,7 @@ export const Int = ({
         disabled={disabled}
         placeholder={placeholder}
         inputMode="numeric"
+        maxLength={length}
         className={cn(
           "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
           className,

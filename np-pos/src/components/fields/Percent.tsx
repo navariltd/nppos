@@ -15,6 +15,9 @@ interface PercentProps {
   max?: number;
   step?: number;
   decimals?: number;
+  precision?: number;
+  nonNegative?: boolean;
+  length?: number;
 }
 
 export const Percent = ({
@@ -29,18 +32,39 @@ export const Percent = ({
   max = 100,
   step = 1,
   decimals = 0,
+  precision,
+  nonNegative = false,
+  length,
 }: PercentProps) => {
   const [displayValue, setDisplayValue] = React.useState(
     value !== 0 ? value.toString() : "",
   );
 
+  const effectiveMin = nonNegative ? Math.max(min, 0) : min;
+  const effectiveMax = max;
+  const effectiveDecimals = precision !== undefined ? precision : decimals;
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setDisplayValue(val);
+    
+    // Strict validation: only allow empty string, minus sign, decimal point, or valid float
+    if (val === "" || val === "-" || val === "." || val === "-.") {
+      onChange(0);
+      return;
+    }
+    
+    // Only allow valid float format (optional minus, digits, optional decimal with digits)
+    if (!/^-?\d*\.?\d*$/.test(val)) {
+      return; // Reject invalid input
+    }
+    
     const num = parseFloat(val);
     if (!isNaN(num)) {
-      const clamped = Math.min(Math.max(num, min), max);
-      onChange(clamped);
+      // Percent is always 0-100
+      const clamped = Math.min(Math.max(num, effectiveMin), effectiveMax);
+      const rounded = parseFloat(clamped.toFixed(effectiveDecimals));
+      onChange(rounded);
     }
   };
 
@@ -48,8 +72,8 @@ export const Percent = ({
     if (displayValue) {
       const num = parseFloat(displayValue);
       if (!isNaN(num)) {
-        const clamped = Math.min(Math.max(num, min), max);
-        setDisplayValue(clamped.toFixed(decimals));
+        const clamped = Math.min(Math.max(num, effectiveMin), max);
+        setDisplayValue(clamped.toFixed(effectiveDecimals));
         onChange(clamped);
       }
     }
@@ -76,12 +100,13 @@ export const Percent = ({
           onBlur={handleBlur}
           disabled={disabled}
           placeholder="0"
-          inputMode="decimal"
-          className={cn(
-            "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 pr-8 text-sm shadow-xs transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-            className,
-          )}
-        />
+        inputMode="decimal"
+        maxLength={length}
+        className={cn(
+          "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 pr-8 text-sm shadow-xs transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+          className,
+        )}
+      />
         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
           %
         </span>

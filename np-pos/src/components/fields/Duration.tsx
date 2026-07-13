@@ -11,6 +11,9 @@ interface DurationProps {
   disabled?: boolean;
   required?: boolean;
   label?: string;
+  hideDays?: boolean;
+  hideSeconds?: boolean;
+  length?: number;
 }
 
 export const Duration = ({
@@ -21,6 +24,9 @@ export const Duration = ({
   disabled = false,
   required = false,
   label,
+  hideDays,
+  hideSeconds,
+  length,
 }: DurationProps) => {
   const [hours, setHours] = React.useState(Math.floor(value / 3600));
   const [minutes, setMinutes] = React.useState(Math.floor((value % 3600) / 60));

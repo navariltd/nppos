@@ -13,6 +13,8 @@ interface CodeProps {
   label?: string;
   language?: string;
   rows?: number;
+  maxLength?: number;
+  length?: number;
 }
 
 export const Code = ({
@@ -26,6 +28,8 @@ export const Code = ({
   label,
   language = "javascript",
   rows = 8,
+  maxLength,
+  length,
 }: CodeProps) => {
   return (
     <div className={cn("w-full flex flex-col gap-1.5", className)}>
@@ -46,6 +50,7 @@ export const Code = ({
         disabled={disabled}
         placeholder={placeholder}
         rows={rows}
+        maxLength={maxLength || length}
         className={cn(
           "font-mono text-sm w-full rounded-md border border-input bg-background px-3 py-2 shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
           className,

@@ -7,24 +7,26 @@ interface CheckProps {
   value: boolean;
   onChange: (val: boolean) => void;
   onBlur?: () => void;
+  placeholder?: string;
   className?: string;
   disabled?: boolean;
   required?: boolean;
   label?: string;
-  checked?: boolean;
+  length?: number;
 }
 
 export const Check = ({
   value = false,
   onChange,
   onBlur,
+  placeholder,
   className = "",
   disabled = false,
   required = false,
   label,
-  checked,
+  length,
 }: CheckProps) => {
-  const isChecked = checked !== undefined ? checked : value;
+  const isChecked = value;
 
   return (
     <div className={cn("w-full flex flex-col gap-1.5", className)}>

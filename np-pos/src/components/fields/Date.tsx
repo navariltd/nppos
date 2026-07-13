@@ -14,6 +14,9 @@ interface DateProps {
   label?: string;
   min?: string;
   max?: string;
+  hideDays?: boolean;
+  hideSeconds?: boolean;
+  length?: number;
 }
 
 export const Date = ({
@@ -27,6 +30,9 @@ export const Date = ({
   label,
   min,
   max,
+  hideDays,
+  hideSeconds,
+  length,
 }: DateProps) => {
   return (
     <div className={cn("w-full flex flex-col gap-1.5", className)}>
@@ -47,13 +53,14 @@ export const Date = ({
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
           disabled={disabled}
-          placeholder={placeholder}
-          min={min}
-          max={max}
-          className={cn(
-            "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-calendar-picker-indicator]:opacity-50",
-            className,
-          )}
+        placeholder={placeholder}
+        min={min}
+        max={max}
+        maxLength={length}
+        className={cn(
+          "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-calendar-picker-indicator]:opacity-50",
+          className,
+        )}
         />
         <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
       </div>

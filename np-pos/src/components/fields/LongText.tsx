@@ -12,6 +12,8 @@ interface LongTextProps {
   required?: boolean;
   label?: string;
   rows?: number;
+  maxLength?: number;
+  length?: number;
 }
 
 export const LongText = ({
@@ -24,6 +26,8 @@ export const LongText = ({
   required = false,
   label,
   rows = 4,
+  maxLength,
+  length,
 }: LongTextProps) => {
   return (
     <div className={cn("w-full flex flex-col gap-1.5", className)}>
@@ -44,6 +48,7 @@ export const LongText = ({
         disabled={disabled}
         placeholder={placeholder}
         rows={rows}
+        maxLength={maxLength || length}
         className={cn(
           "w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
           className,

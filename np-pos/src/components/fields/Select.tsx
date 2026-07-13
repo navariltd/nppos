@@ -20,6 +20,7 @@ interface SelectProps {
   required?: boolean;
   label?: string;
   options: SelectOption[];
+  length?: number;
 }
 
 export const Select = ({
@@ -32,6 +33,7 @@ export const Select = ({
   required = false,
   label,
   options = [],
+  length,
 }: SelectProps) => {
   const [isOpen, setIsOpen] = React.useState(false);
 

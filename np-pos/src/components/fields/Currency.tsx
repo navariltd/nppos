@@ -14,6 +14,11 @@ interface CurrencyProps {
   label?: string;
   currency?: string;
   decimals?: number;
+  precision?: number;
+  nonNegative?: boolean;
+  min?: number;
+  max?: number;
+  length?: number;
 }
 
 export const Currency = ({
@@ -27,6 +32,11 @@ export const Currency = ({
   label,
   currency = "$",
   decimals = 2,
+  precision,
+  nonNegative = false,
+  min = -Infinity,
+  max = Infinity,
+  length,
 }: CurrencyProps) => {
   const [displayValue, setDisplayValue] = React.useState(value.toString());
 
@@ -36,21 +46,41 @@ export const Currency = ({
     return num.toFixed(decimals);
   };
 
+  const effectiveMin = nonNegative ? Math.max(min, 0) : min;
+  const effectiveDecimals = precision !== undefined ? precision : decimals;
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setDisplayValue(val);
+    
+    // Strict validation: only allow empty string, minus sign, decimal point, or valid float
+    if (val === "" || val === "-" || val === "." || val === "-.") {
+      onChange(0);
+      return;
+    }
+    
+    // Only allow valid float format (optional minus, digits, optional decimal with digits)
+    if (!/^-?\d*\.?\d*$/.test(val)) {
+      return; // Reject invalid input
+    }
+    
     const num = parseFloat(val);
     if (!isNaN(num)) {
-      onChange(num);
-    } else if (val === "" || val === "-") {
-      onChange(0);
+      const clamped = Math.min(Math.max(num, effectiveMin), max);
+      const rounded = parseFloat(clamped.toFixed(effectiveDecimals));
+      onChange(rounded);
     }
   };
 
   const handleBlur = () => {
     if (displayValue) {
-      const formatted = formatValue(displayValue);
-      setDisplayValue(formatted);
+      const num = parseFloat(displayValue);
+      if (!isNaN(num)) {
+        const clamped = Math.min(Math.max(num, effectiveMin), max);
+        const formatted = clamped.toFixed(effectiveDecimals);
+        setDisplayValue(formatted);
+        onChange(clamped);
+      }
     }
     onBlur?.();
   };
@@ -71,19 +101,20 @@ export const Currency = ({
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
           {currency}
         </span>
-        <input
-          type="text"
-          value={displayValue}
-          onChange={handleChange}
-          onBlur={handleBlur}
-          disabled={disabled}
-          placeholder={placeholder}
-          inputMode="decimal"
-          className={cn(
-            "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 pl-8 text-sm shadow-xs transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-            className,
-          )}
-        />
+      <input
+        type="text"
+        value={displayValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        disabled={disabled}
+        placeholder={placeholder}
+        inputMode="decimal"
+        maxLength={length}
+        className={cn(
+          "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 pl-8 text-sm shadow-xs transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+          className,
+        )}
+      />
       </div>
     </div>
   );
