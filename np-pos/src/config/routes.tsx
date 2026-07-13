@@ -1,5 +1,8 @@
-import UsersPage from "@/app/users/page";
+/** Application route configuration with lazy-loaded pages and role-protected routes. */
+
 import { lazy } from "react";
+
+import UsersPage from "@/app/users/page";
 import { Navigate } from "react-router-dom";
 
 const SignIn = lazy(() => import("@/app/auth/sign-in/page"));
@@ -18,6 +21,7 @@ const CashVouchers = lazy(() => import("@/app/pos/cash-vouchers/page"));
 const AtmCard = lazy(() => import("@/app/pos/atm-card/page"));
 const TransactionHistory = lazy(() => import("@/app/pos/transactions/page"));
 const GoodsHampers = lazy(() => import("@/app/pos/goods-hampers/page"));
+const ClosingEntry = lazy(() => import("@/app/pos/closing-entry/page"));
 const Playground = lazy(() => import("@/app/pos/playground/page"));
 
 const UserSettings = lazy(() => import("@/app/settings/user/page"));
@@ -68,6 +72,7 @@ export const routes: RouteConfig[] = [
           { path: "cash-vouchers", element: <CashVouchers /> },
           { path: "atm-card", element: <AtmCard /> },
           { path: "transactions", element: <TransactionHistory /> },
+          { path: "closing-entry", element: <ClosingEntry /> },
           { path: "playground", element: <Playground /> },
         ],
       },

@@ -1,8 +1,13 @@
 "use client";
 
-import { Logo } from "@/components/logo";
+/** Application sidebar with navigation groups for authenticated and unauthenticated users. */
+
+import * as React from "react";
+import { Link } from "react-router-dom";
+
 import {
   Banknote,
+  CheckSquare,
   Code2,
   CreditCard,
   History,
@@ -11,11 +16,11 @@ import {
   Package,
   User,
 } from "lucide-react";
-import * as React from "react";
-import { Link } from "react-router-dom";
 
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Logo } from "@/components/logo";
 import {
   Sidebar,
   SidebarContent,
@@ -62,6 +67,11 @@ const privateNavGroups = [
         icon: History,
       },
       {
+        title: "Closing Entry",
+        url: "/pos/closing-entry",
+        icon: CheckSquare,
+      },
+      {
         title: "Users",
         url: "/users",
         icon: User,
@@ -79,8 +89,6 @@ const privateNavGroups = [
     ],
   },
 ];
-
-import { Skeleton } from "@/components/ui/skeleton";
 
 function SidebarSkeleton() {
   return (
