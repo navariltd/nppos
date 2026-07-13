@@ -1,16 +1,12 @@
 "use client";
 
-import { POSProvider, usePOS } from "@/contexts/pos-context";
-import { useUser } from "@/contexts/user-context";
-import { Navigate, Outlet } from "react-router-dom";
 import { POSOpeningModal } from "@/app/pos/components/POSOpeningModal";
 import { Skeleton } from "@/components/ui/skeleton";
+import { POSProvider, usePOS } from "@/contexts/pos-context";
+import { useUser } from "@/contexts/user-context";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 
-/**
- * POS-specific layout that adds POSProvider and opening-entry checking.
- * The sidebar and site header are handled by the parent AppLayout which
- * stays mounted across all authenticated page navigations.
- */
+/** Renders skeleton placeholders matching POS page content structure during metadata or authentication loading. */
 function ContentSkeleton() {
   return (
     <div className="px-4 lg:px-6 space-y-6">
@@ -34,16 +30,24 @@ function ContentSkeleton() {
 }
 
 function POSLayoutContent() {
-  const { user } = useUser();
+  const { user, isLoading, isLoggedOut } = useUser();
   const { posOpeningEntry, isLoadingMetadata, refreshPOSMetadata } = usePOS();
+  const location = useLocation();
 
-  // Show page skeleton while metadata loads on first visit
   if (isLoadingMetadata && !posOpeningEntry) {
     return <ContentSkeleton />;
   }
 
-  if (!user) {
-    return <Navigate to="/auth/sign-in" replace />;
+  if (isLoggedOut) {
+    const currentPath = location.pathname + location.search;
+    const encodedRedirect = encodeURIComponent(currentPath);
+    return (
+      <Navigate to={`/auth/sign-in?redirect-to=${encodedRedirect}`} replace />
+    );
+  }
+
+  if (isLoading || !user) {
+    return <ContentSkeleton />;
   }
 
   const needsOpeningEntry =
