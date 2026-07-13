@@ -2,11 +2,14 @@
 
 import { CommandSearch, SearchTrigger } from "@/components/command-search";
 import { ModeToggle } from "@/components/mode-toggle";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import * as React from "react";
+import { useUser } from "@/contexts/user-context";
 
 export function SiteHeader() {
+  const { isLoading } = useUser();
   const [searchOpen, setSearchOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -30,9 +33,15 @@ export function SiteHeader() {
             orientation="vertical"
             className="mx-2 data-[orientation=vertical]:h-4"
           />
-          <div className="flex-1 max-w-sm">
-            <SearchTrigger onClick={() => setSearchOpen(true)} />
-          </div>
+          {isLoading ? (
+            <div className="flex-1 max-w-sm">
+              <Skeleton className="h-9 w-full rounded-md" />
+            </div>
+          ) : (
+            <div className="flex-1 max-w-sm">
+              <SearchTrigger onClick={() => setSearchOpen(true)} />
+            </div>
+          )}
           <div className="ml-auto flex items-center gap-2">
             <ModeToggle />
           </div>

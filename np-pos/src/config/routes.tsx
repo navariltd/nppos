@@ -26,22 +26,20 @@ const NotificationSettings = lazy(
   () => import("@/app/settings/notifications/page"),
 );
 
-import { ProtectedRoute } from "@/app/auth/protected-route";
+import { AppLayout } from "@/components/layouts/app-layout";
+import { POSLayout } from "@/components/layouts/pos-layout";
 import { RoleProtectedRoute } from "@/app/auth/role-protected-route";
 
 export interface RouteConfig {
-  path: string;
+  path?: string;
   element: React.ReactNode;
   children?: RouteConfig[];
   protected?: boolean;
   roles?: string[];
+  index?: boolean;
 }
 
 export const routes: RouteConfig[] = [
-  {
-    path: "/",
-    element: <Navigate to="/pos" replace />,
-  },
   {
     path: "/auth/sign-in",
     element: <SignIn />,
@@ -54,85 +52,52 @@ export const routes: RouteConfig[] = [
     path: "/auth/forgot-password",
     element: <ForgotPassword />,
   },
+  // Single AppLayout wraps ALL authenticated pages.
+  // It stays mounted across all navigations so the sidebar never reloads.
   {
-    path: "/pos",
-    element: (
-      <ProtectedRoute>
-        <Dashboard />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/pos/goods-hampers",
-    element: (
-      <ProtectedRoute>
-        <GoodsHampers />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/pos/cash-vouchers",
-    element: (
-      <ProtectedRoute>
-        <CashVouchers />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/pos/atm-card",
-    element: (
-      <ProtectedRoute>
-        <AtmCard />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/pos/transactions",
-    element: (
-      <ProtectedRoute>
-        <TransactionHistory />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/pos/playground",
-    element: (
-      <ProtectedRoute>
-        <Playground />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/users",
-    element: (
-      <RoleProtectedRoute roles={["System Manager", "Administrator"]}>
-        <UsersPage />
-      </RoleProtectedRoute>
-    ),
-  },
-  {
-    path: "/settings/user",
-    element: (
-      <ProtectedRoute>
-        <UserSettings />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/settings/account",
-    element: (
-      <ProtectedRoute>
-        <AccountSettings />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/settings/notifications",
-    element: (
-      <ProtectedRoute>
-        <NotificationSettings />
-      </ProtectedRoute>
-    ),
+    path: "/",
+    element: <AppLayout />,
+    children: [
+      { path: "", element: <Navigate to="/pos" replace /> },
+      {
+        path: "pos",
+        element: <POSLayout />,
+        children: [
+          { path: "", element: <Dashboard /> },
+          { path: "goods-hampers", element: <GoodsHampers /> },
+          { path: "cash-vouchers", element: <CashVouchers /> },
+          { path: "atm-card", element: <AtmCard /> },
+          { path: "transactions", element: <TransactionHistory /> },
+          { path: "playground", element: <Playground /> },
+        ],
+      },
+      {
+        path: "users",
+        element: (
+          <RoleProtectedRoute roles={["System Manager", "Administrator"]}>
+            <UsersPage />
+          </RoleProtectedRoute>
+        ),
+      },
+      {
+        path: "settings",
+        element: <AppLayout />,
+        children: [
+          {
+            path: "user",
+            element: <UserSettings />,
+          },
+          {
+            path: "account",
+            element: <AccountSettings />,
+          },
+          {
+            path: "notifications",
+            element: <NotificationSettings />,
+          },
+        ],
+      },
+    ],
   },
   {
     path: "/errors/unauthorized",
