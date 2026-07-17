@@ -164,28 +164,41 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
   }, [location.state, searchParams]);
 
   useEffect(() => {
-    if (!isNew || !metaReady || !schemaFields.length) return;
-    const routeOpts = routeOptions;
-    const keys = Object.keys(routeOpts);
-    if (keys.length === 0) return;
+    if (schemaError) {
+      const msg = parseFrappeError(schemaError);
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (schemaData?.message?.docs?.length || schemaData?.docs?.length) {
+      const docs = schemaData.message?.docs ?? schemaData.docs ?? [];
+      const meta = docs.find((d: any) => d.name === doctype) ?? docs[0];
+      if (meta) {
+        setSchemaFields((meta.fields ?? []).map((f: any) => ({ ...f, required: f.reqd || f.required, read_only: f.read_only })));
+        setMetaConfig(meta);
+        setIsSubmittable(meta.is_submittable === 1);
+      }
+      setMetaReady(true);
+    }
+  }, [schemaData, schemaError, doctype]);
+
+  useEffect(() => {
+    if (!isNew || !metaReady || !schemaFields.length || !Object.keys(routeOptions).length) return;
     const prefill: Record<string, any> = {};
     let hasAny = false;
-    keys.forEach((key) => {
+    for (const [key, value] of Object.entries(routeOptions)) {
       const df = schemaFields.find((f: any) => f.fieldname === key);
-      if (!df) return;
-      if (df.no_copy) return;
-      if (key.startsWith("__") || key === "name" || key === "doctype") return;
-      let value: any = routeOpts[key];
-      if (typeof value === "string") {
+      if (!df || df.no_copy || key.startsWith("__") || key === "name" || key === "doctype") continue;
+      let val: any = value;
+      if (typeof val === "string") {
         try {
-          const parsed = JSON.parse(value);
-          if (Array.isArray(parsed)) return;
-          if (typeof parsed === "object" && parsed !== null) value = parsed;
+          const parsed = JSON.parse(val);
+          if (!Array.isArray(parsed) && typeof parsed === "object" && parsed !== null) val = parsed;
         } catch {}
       }
-      prefill[key] = value;
+      prefill[key] = val;
       hasAny = true;
-    });
+    }
     if (hasAny) {
       setForm((prev) => ({ ...prev, ...prefill }));
       setOriginalDoc(JSON.parse(JSON.stringify({ ...prefill })));
@@ -195,14 +208,30 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
   useEffect(() => {
     if (isNew && metaReady) {
       if (Object.keys(routeOptions).length === 0) {
-        setForm({}); setOriginalDoc(null); setDocstatus(0); setIsEditing(true); setIsLoadingDoc(false);
+        setForm({});
+        setOriginalDoc(null);
+        setDocstatus(0);
+        setIsEditing(true);
+        setIsLoadingDoc(false);
       }
       return;
     }
-    if (docError) { const e = docError as any; setError(parseFrappeError(e)); toast.error(parseFrappeError(e)); setIsLoadingDoc(false); return; }
+    if (docError) {
+      const msg = parseFrappeError(docError);
+      setError(msg);
+      toast.error(msg);
+      setIsLoadingDoc(false);
+      return;
+    }
     if (docData) {
       const doc = docData?.message?.docs?.[0] ?? docData?.docs?.[0] ?? {};
-      if (doc.name) { setForm(doc); setOriginalDoc(JSON.parse(JSON.stringify(doc))); setDocstatus(doc.docstatus ?? 0); setIsEditing(false); setHasBeenSaved(true); }
+      if (doc.name) {
+        setForm(doc);
+        setOriginalDoc(JSON.parse(JSON.stringify(doc)));
+        setDocstatus(doc.docstatus ?? 0);
+        setIsEditing(false);
+        setHasBeenSaved(true);
+      }
       setIsLoadingDoc(false);
     }
   }, [docData, docError, isNew, metaReady, routeOptions]);
@@ -215,7 +244,10 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
   }, [isNew, metaReady, isLoadingDoc]);
 
   useEffect(() => {
-    if (isNew) { setIsEditing(true); return; }
+    if (isNew) {
+      setIsEditing(true);
+      return;
+    }
     if (originalDoc) {
       const isDirty = JSON.stringify(form) !== JSON.stringify(originalDoc);
       setIsEditing(isDirty);
@@ -235,65 +267,94 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
   }, [metaReady, schemaFields]);
 
   const toggleSection = (fn: string) => setCollapsedSections((p) => ({ ...p, [fn]: !p[fn] }));
+  const handleChange = (value: any, fieldname?: string) => {
+    if (!fieldname) return;
+    setForm((p) => ({ ...p, [fieldname]: value }));
+  };
+  const handleBack = () => {
+    if (onBack) onBack();
+    else navigate(`/app/${doctype.toLowerCase().replace(/ /g, "-")}`);
+  };
+  const handleReset = () => {
+    setForm(JSON.parse(JSON.stringify(originalDoc)));
+    setIsEditing(false);
+    setError(null);
+  };
 
-  if (userLoading || !metaReady) return <div className="px-4 lg:px-6 space-y-6 pb-8"><Skeleton className="h-10 w-20" /><Skeleton className="h-8 w-48" /><div className="space-y-4"><Skeleton className="h-[200px] w-full rounded-lg" /><Skeleton className="h-[300px] w-full rounded-lg" /></div></div>;
-  if (!metaConfig) return <div className="px-4 lg:px-6 text-center py-20 text-muted-foreground">Failed to load configuration.</div>;
+  if (userLoading || !metaReady) {
+    return (
+      <div className="px-4 lg:px-6 space-y-6 pb-8">
+        <Skeleton className="h-10 w-20" />
+        <Skeleton className="h-8 w-48" />
+        <div className="space-y-4">
+          <Skeleton className="h-[200px] w-full rounded-lg" />
+          <Skeleton className="h-[300px] w-full rounded-lg" />
+        </div>
+      </div>
+    );
+  }
+  if (!metaConfig) {
+    return <div className="px-4 lg:px-6 text-center py-20 text-muted-foreground">Failed to load configuration.</div>;
+  }
+
+  const doctypeLabel = metaConfig?.name || doctype;
 
   return (
     <div className="px-4 lg:px-6 space-y-6 pb-8">
-      <FormHeader isNew={isNew} metaConfig={metaConfig} form={form} docId={docId}
-        docstatus={docstatus} isBusy={isSaving || isSubmitting || isCancelling}
-        isEditing={isEditing} isSubmittable={isSubmittable}
-        savedName={null} error={error}
-        isSaving={isSaving} isSubmitting={isSubmitting} isCancelling={isCancelling}
+      <FormHeader
+        isNew={isNew}
+        metaConfig={metaConfig}
+        form={form}
+        docId={docId}
+        docstatus={docstatus}
+        isBusy={isSaving || isSubmitting || isCancelling}
+        isEditing={isEditing}
+        isSubmittable={isSubmittable}
+        savedName={null}
+        error={error}
+        isSaving={isSaving}
+        isSubmitting={isSubmitting}
+        isCancelling={isCancelling}
         hasBeenSaved={hasBeenSaved}
-        onBack={handleBack} onReset={() => { setForm(JSON.parse(JSON.stringify(originalDoc))); setIsEditing(false); setError(null); }}
+        onBack={handleBack}
+        onReset={handleReset}
         onSave={handleSave}
         onSubmit={() => setConfirmAction("submit")}
         onCancel={() => setConfirmAction("cancel")}
-        onAmend={handleAmend} onDuplicate={docstatus === 0 && !isNew ? handleDuplicate : undefined} />
+        onAmend={handleAmend}
+        onDuplicate={docstatus === 0 && !isNew ? handleDuplicate : undefined}
+      />
 
-      <TabbedForm schemaFields={schemaFields} form={form} doctype={doctype}
-        docData={docData} metaConfig={metaConfig}
+      <TabbedForm
+        schemaFields={schemaFields}
+        form={form}
+        doctype={doctype}
+        docData={docData}
+        metaConfig={metaConfig}
         isReadOnly={docstatus !== 0}
-        isNew={isNew} isLoadingDoc={isLoadingDoc}
+        isNew={isNew}
+        isLoadingDoc={isLoadingDoc}
         onFieldChange={handleChange}
-        collapsedSections={collapsedSections} onToggleSection={toggleSection}
-        reloadData={handleSave as any} />
+        collapsedSections={collapsedSections}
+        onToggleSection={toggleSection}
+        reloadData={handleSave as any}
+      />
 
-      <AlertDialog open={confirmAction === "submit"} onOpenChange={(open) => { if (!open) setConfirmAction(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Submit {metaConfig?.name || doctype}</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to submit this document? Once submitted, it cannot be edited.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSubmit} disabled={isSubmitting}>
-              {isSubmitting ? "Submitting..." : "Submit"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmSubmitDialog
+        open={confirmAction === "submit"}
+        onOpenChange={(open) => { if (!open) setConfirmAction(null); }}
+        doctypeLabel={doctypeLabel}
+        isSubmitting={isSubmitting}
+        onConfirm={() => { setConfirmAction(null); handleSubmit(); }}
+      />
 
-      <AlertDialog open={confirmAction === "cancel"} onOpenChange={(open) => { if (!open) setConfirmAction(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancel {metaConfig?.name || doctype}</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to cancel this document? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>No, keep it</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={handleCancel} disabled={isCancelling}>
-              {isCancelling ? "Cancelling..." : "Yes, cancel"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmCancelDialog
+        open={confirmAction === "cancel"}
+        onOpenChange={(open) => { if (!open) setConfirmAction(null); }}
+        doctypeLabel={doctypeLabel}
+        isCancelling={isCancelling}
+        onConfirm={() => { setConfirmAction(null); handleCancel(); }}
+      />
     </div>
   );
 }
