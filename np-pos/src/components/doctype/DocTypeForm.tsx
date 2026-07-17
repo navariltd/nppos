@@ -1,8 +1,14 @@
+/**
+ * DocTypeForm – full document form for any Frappe doctype, with save/submit/cancel and tabbed layout.
+ *
+ * Key dependencies: uses Frappe React SDK for API calls, renders via TabbedForm for the field layout.
+ */
+
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
+import { useFrappeGetCall } from "frappe-react-sdk";
 import { toast } from "sonner";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,6 +26,8 @@ import {
 import type { FrappeFieldMeta } from "./types";
 import { FormHeader } from "./form/FormHeader";
 import { TabbedForm } from "./form/TabbedForm";
+import { parseFrappeError } from "./form/parse-error";
+import { useFormActions } from "./form/form-actions";
 
 interface DocTypeFormProps {
   doctype: string;
@@ -29,25 +37,73 @@ interface DocTypeFormProps {
   onBack?: () => void;
 }
 
-function parseFrappeError(err: any): string {
-  if (err?._server_messages) {
-    try {
-      const messages = JSON.parse(err._server_messages);
-      if (Array.isArray(messages) && messages.length > 0) {
-        const first = typeof messages[0] === "string" ? JSON.parse(messages[0]) : messages[0];
-        return first?.message || first?.title || err?.message || "An error occurred";
-      }
-    } catch {}
-  }
-  if (err?.messages && Array.isArray(err.messages) && err.messages.length > 0) {
-    return err.messages[0];
-  }
-  if (err?.exception) return err.exception;
-  if (err?.message) return err.message;
-  return "An error occurred";
+type ConfirmAction = "submit" | "cancel" | null;
+
+function ConfirmSubmitDialog({
+  open,
+  onOpenChange,
+  doctypeLabel,
+  isSubmitting,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  doctypeLabel: string;
+  isSubmitting: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Submit {doctypeLabel}</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to submit this document? Once submitted, it cannot be edited.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm} disabled={isSubmitting}>
+            {isSubmitting ? "Submitting..." : "Submit"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }
 
-type ConfirmAction = "submit" | "cancel" | null;
+function ConfirmCancelDialog({
+  open,
+  onOpenChange,
+  doctypeLabel,
+  isCancelling,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  doctypeLabel: string;
+  isCancelling: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cancel {doctypeLabel}</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to cancel this document? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>No, keep it</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={onConfirm} disabled={isCancelling}>
+            {isCancelling ? "Cancelling..." : "Yes, cancel"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, onSuccess, onBack }: DocTypeFormProps) {
   const navigate = useNavigate();
@@ -66,9 +122,6 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
   const [docstatus, setDocstatus] = useState(0);
   const [isSubmittable, setIsSubmittable] = useState(false);
   const [isLoadingDoc, setIsLoadingDoc] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCancelling, setIsCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [metaReady, setMetaReady] = useState(false);
@@ -86,22 +139,15 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
     doctype && docId && !isNew ? `dtf-doc-${doctype}-${docId}` : null,
   );
 
-  const { call: updateDoc } = useFrappePostCall("frappe.client.save");
-  const { call: saveDocs } = useFrappePostCall("frappe.desk.form.save.savedocs");
-
-  useEffect(() => {
-    if (schemaError) { const e = schemaError as any; setError(parseFrappeError(e)); toast.error(parseFrappeError(e)); return; }
-    if (schemaData?.message?.docs?.length || schemaData?.docs?.length) {
-      const docs = schemaData.message?.docs ?? schemaData.docs ?? [];
-      const meta = docs.find((d: any) => d.name === doctype) ?? docs[0];
-      if (meta) {
-        setSchemaFields((meta.fields ?? []).map((f: any) => ({ ...f, required: f.reqd || f.required, read_only: f.read_only })));
-        setMetaConfig(meta);
-        setIsSubmittable(meta.is_submittable === 1);
-      }
-      setMetaReady(true);
-    }
-  }, [schemaData, schemaError, doctype]);
+  const {
+    isSaving, isSubmitting, isCancelling,
+    handleSave, handleSubmit, handleCancel,
+    handleDuplicate, handleAmend,
+  } = useFormActions({
+    doctype, docId, form, isNew,
+    onSuccess,
+    onError: (msg) => setError(msg),
+  });
 
   const routeOptions = useMemo(() => {
     const opts: Record<string, string> = {};
@@ -176,63 +222,6 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
       if (isDirty && hasBeenSaved) setHasBeenSaved(false);
     }
   }, [form, originalDoc, isNew, hasBeenSaved]);
-
-  const handleChange = (value: any, fieldname?: string) => { if (!fieldname) return; setForm((p) => ({ ...p, [fieldname]: value })); };
-
-  const handleSave = async () => {
-    if (!doctype) return;
-    setIsSaving(true); setError(null);
-    try {
-      const cleaned = { ...form };
-      if (isNew) { delete cleaned.name; delete cleaned.creation; delete cleaned.modified; delete cleaned.modified_by; delete cleaned.owner; delete cleaned.docstatus; delete cleaned.idx; }
-      const res: any = await updateDoc({ doc: { doctype, name: !isNew ? docId : undefined, ...cleaned } });
-      const saved = res?.message ?? res?.docs?.[0] ?? res;
-      if (saved?.name) {
-        setForm(saved); setOriginalDoc(JSON.parse(JSON.stringify(saved))); setDocstatus(saved.docstatus ?? 0); setIsEditing(false); setHasBeenSaved(true);
-        toast.success(`${doctype} saved successfully${isNew ? ` as ${saved.name}` : ""}`);
-        if (isNew) navigate(`/app/${doctype.toLowerCase().replace(/ /g, "-")}/${saved.name}`, { replace: true });
-        onSuccess?.(saved.name);
-      }
-    } catch (err: any) { const msg = parseFrappeError(err); setError(msg); toast.error(msg); }
-    finally { setIsSaving(false); }
-  };
-
-  const handleSubmit = async () => {
-    if (!doctype || !docId) return;
-    setConfirmAction(null);
-    setIsSubmitting(true); setError(null);
-    try {
-      const res: any = await saveDocs({ doc: JSON.stringify({ ...form, doctype, name: docId, docstatus: 1 }), action: "Submit" });
-      const d = res?.docs?.[0] ?? res?.message?.docs?.[0];
-      if (d) { setForm(d); setDocstatus(1); toast.success(`${doctype} submitted successfully`); onSuccess?.(docId); }
-    } catch (err: any) { const msg = parseFrappeError(err); setError(msg); toast.error(msg); }
-    finally { setIsSubmitting(false); }
-  };
-
-  const handleCancel = async () => {
-    if (!doctype || !docId) return;
-    setConfirmAction(null);
-    setIsCancelling(true); setError(null);
-    try { const res: any = await saveDocs({ doctype, name: docId, action: "Cancel" }); if (res?.docs?.[0]) { setForm(res.docs[0]); setDocstatus(2); toast.success(`${doctype} cancelled successfully`); } }
-    catch (err: any) { const msg = parseFrappeError(err); setError(msg); toast.error(msg); }
-    finally { setIsCancelling(false); }
-  };
-
-  const handleDuplicate = useCallback(() => {
-    const a: Record<string, any> = { ...form };
-    delete a.name; delete a.creation; delete a.modified; delete a.modified_by; delete a.owner; delete a.docstatus; delete a.idx;
-    delete a.amended_from;
-    navigate(`/app/${doctype.toLowerCase().replace(/ /g, "-")}/new`, { state: { routeOptions: a } });
-  }, [form, doctype, navigate]);
-
-  const handleAmend = () => {
-    const a: Record<string, any> = { ...form, amended_from: docId };
-    delete a.name; delete a.creation; delete a.modified; delete a.modified_by; delete a.owner; delete a.docstatus; delete a.idx;
-    setForm(a);
-    navigate(`/app/${doctype.toLowerCase().replace(/ /g, "-")}/new`);
-  };
-
-  const handleBack = () => { if (onBack) onBack(); else navigate(`/app/${doctype.toLowerCase().replace(/ /g, "-")}`); };
 
   useEffect(() => {
     if (!metaReady || !schemaFields.length) return;
