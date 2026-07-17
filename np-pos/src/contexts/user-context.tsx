@@ -51,7 +51,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [authResolved, setAuthResolved] = React.useState(false);
 
   React.useEffect(() => {
-    if (!authLoading && currentUser !== undefined) {
+    // Auth is resolved when loading finishes AND we have a definite answer,
+    // even if that answer is undefined/null/Guest (meaning not logged in).
+    if (!authLoading) {
       setAuthResolved(true);
       if (currentUser && currentUser !== "Guest") {
         setOptimisticUser(currentUser);
@@ -64,16 +66,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, [authLoading, currentUser]);
 
   const isActuallyGuest = authResolved && !optimisticUser;
-  const shouldFetch = !!optimisticUser && optimisticUser !== "Guest" && authResolved;
+  const shouldFetch =
+    !!optimisticUser && optimisticUser !== "Guest" && authResolved;
 
   const {
     data: userData,
     error: userError,
     isValidating: userLoading,
-  } = useFrappeGetDoc<any>(
-    "User",
-    shouldFetch ? optimisticUser : undefined,
-  );
+  } = useFrappeGetDoc<any>("User", shouldFetch ? optimisticUser : undefined);
 
   const [userDataResolved, setUserDataResolved] = React.useState(false);
 
@@ -104,7 +104,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     if (!userDataResolved) return true;
     if (shouldFetch && userLoading) return true;
     return false;
-  }, [authResolved, optimisticUser, shouldFetch, userLoading, userDataResolved]);
+  }, [
+    authResolved,
+    optimisticUser,
+    shouldFetch,
+    userLoading,
+    userDataResolved,
+  ]);
 
   const value = React.useMemo(
     () => ({

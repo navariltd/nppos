@@ -3,7 +3,7 @@
 import { lazy } from "react";
 
 import UsersPage from "@/app/users/page";
-import { Navigate } from "react-router-dom";
+import { Navigate, Outlet } from "react-router-dom";
 
 const SignIn = lazy(() => import("@/app/auth/sign-in/page"));
 const SignUp = lazy(() => import("@/app/auth/sign-up/page"));
