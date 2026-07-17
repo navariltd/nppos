@@ -200,7 +200,7 @@ export const FrappeField = ({
   ...props
 }: FrappeFieldProps) => {
   const fieldType = getFieldType(field.fieldtype);
-  const isRequired = field.required || field.reqd;
+  const isRequired = !!(field.required || field.reqd);
   const isReadOnly = field.read_only || props.read_only;
   const isHidden = field.hidden;
   

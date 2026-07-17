@@ -119,6 +119,15 @@ export const Table = ({
     setEditIndex(null);
   };
 
+  // When disabled (read-only) and no data: hide the entire table
+  const isEmpty = !Array.isArray(value) || value.length === 0;
+  if (disabled && isEmpty) {
+    return null;
+  }
+
+  // Disabled mode: hide action buttons except view (pencil)
+  const showActions = !disabled;
+
   const displayLabel = label || doctype;
   const stickyLeftCount = Math.min(stickyColumns, fields.length);
 
@@ -170,14 +179,27 @@ export const Table = ({
                       )}
                     </th>
                   ))}
-                  <th
-                    className={cn(
-                      "h-10 w-[88px] px-3 text-center align-middle font-medium text-muted-foreground",
-                      STICKY_RIGHT_HEADER_CLASS,
-                    )}
-                  >
-                    Actions
-                  </th>
+                  {showActions && (
+                    <th
+                      className={cn(
+                        "h-10 w-[88px] px-3 text-center align-middle font-medium text-muted-foreground",
+                        STICKY_RIGHT_HEADER_CLASS,
+                      )}
+                    >
+                      Actions
+                    </th>
+                  )}
+                  {/* Always show a narrow column for the view button even in readonly */}
+                  {!showActions && (
+                    <th
+                      className={cn(
+                        "h-10 w-[44px] px-1 text-center align-middle font-medium text-muted-foreground",
+                        STICKY_RIGHT_HEADER_CLASS,
+                      )}
+                    >
+                      <span className="sr-only">View</span>
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -227,22 +249,22 @@ export const Table = ({
                         <div className="flex items-center justify-center gap-0.5">
                           <button
                             type="button"
-                            disabled={disabled}
                             onClick={() => setEditIndex(rowIndex)}
-                            className="p-1.5 hover:bg-primary/10 text-muted-foreground hover:text-primary rounded-md transition-colors disabled:opacity-50"
-                            title="Edit row"
+                            className="p-1.5 hover:bg-primary/10 text-muted-foreground hover:text-primary rounded-md transition-colors"
+                            title={disabled ? "View row" : "Edit row"}
                           >
                             <Pencil className="size-3.5" />
                           </button>
-                          <button
-                            type="button"
-                            disabled={disabled}
-                            onClick={() => handleRemoveField(rowIndex)}
-                            className="p-1.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md transition-colors disabled:opacity-50"
-                            title="Delete row"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
+                          {showActions && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveField(rowIndex)}
+                              className="p-1.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md transition-colors"
+                              title="Delete row"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -252,21 +274,23 @@ export const Table = ({
             </table>
           </div>
 
-          <div className="p-2 border-t bg-muted/20 flex justify-start">
-            <button
-              type="button"
-              disabled={disabled || fields.length === 0}
-              onClick={handleAddField}
-              className="flex items-center gap-1.5 text-xs font-medium border px-2.5 py-1.5 rounded-md bg-background shadow-xs hover:bg-muted transition-colors disabled:opacity-50"
-            >
-              <Plus className="size-3.5" />
-              Add Row
-            </button>
-          </div>
+          {showActions && (
+            <div className="p-2 border-t bg-muted/20 flex justify-start">
+              <button
+                type="button"
+                disabled={disabled || fields.length === 0}
+                onClick={handleAddField}
+                className="flex items-center gap-1.5 text-xs font-medium border px-2.5 py-1.5 rounded-md bg-background shadow-xs hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                <Plus className="size-3.5" />
+                Add Row
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Row Edit Modal */}
+      {/* Row Edit Modal - opens in read-only mode when disabled */}
       {editIndex !== null && value[editIndex] && (
         <RowEditModal
           open={editIndex !== null}
@@ -276,6 +300,7 @@ export const Table = ({
           rowData={value[editIndex]}
           allFields={allFields}
           onSave={handleEditSave}
+          readOnly={disabled}
         />
       )}
     </div>

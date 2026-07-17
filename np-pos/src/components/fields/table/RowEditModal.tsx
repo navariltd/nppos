@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, Pencil } from "lucide-react";
 import { FrappeField, type FrappeFieldMeta } from "../FrappeField";
 import { buildFormLayout } from "./formLayout";
 import type { DoctypeField, FormSection } from "./types";
@@ -22,6 +22,8 @@ interface RowEditModalProps {
   rowData: Record<string, any>;
   allFields: DoctypeField[];
   onSave: (data: Record<string, any>) => void;
+  /** If true, renders in read-only view mode (no edit/save, just display). Defaults to false. */
+  readOnly?: boolean;
 }
 
 /**
@@ -86,6 +88,7 @@ export const RowEditModal = ({
   rowData,
   allFields,
   onSave,
+  readOnly = false,
 }: RowEditModalProps) => {
   const [editData, setEditData] = React.useState<Record<string, any>>({});
 
@@ -96,6 +99,7 @@ export const RowEditModal = ({
   }, [open, rowData]);
 
   const handleFieldChange = (fieldname: string, val: any) => {
+    if (readOnly) return;
     setEditData((prev) => ({ ...prev, [fieldname]: val }));
   };
 
@@ -129,83 +133,126 @@ export const RowEditModal = ({
     setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  // In read-only mode, filter out fields with no value
+  const hasVisibleContent = React.useCallback(
+    (fields: DoctypeField[]) => {
+      return fields.some((field) => {
+        if (["Tab Break", "Section Break", "Column Break", "Heading", "Fold"].includes(field.fieldtype)) return false;
+        if (field.hidden === 1) return false;
+        if (readOnly) {
+          const val = editData[field.fieldname];
+          const hasValue = val !== undefined && val !== null && val !== "" && val !== 0;
+          return hasValue;
+        }
+        return true;
+      });
+    },
+    [readOnly, editData]
+  );
+
   const renderFormFields = (fields: DoctypeField[]) => {
-    return fields.map((field) => {
-      const ft = field.fieldtype;
-      if (
-        ["Tab Break", "Section Break", "Column Break", "Heading", "Fold"].includes(ft)
-      )
-        return null;
-      // Skip hidden fields
-      if (field.hidden === 1) return null;
-      // For read_only, just show read-only
-      const meta = toFrappeFieldMeta(field);
-      return (
-        <FrappeField
-          key={field.fieldname}
-          field={meta}
-          value={editData[field.fieldname]}
-          onChange={(val: any) => handleFieldChange(field.fieldname, val)}
-          showLabel
-        />
-      );
-    });
+    return fields
+      .map((field) => {
+        const ft = field.fieldtype;
+        if (["Tab Break", "Section Break", "Column Break", "Heading", "Fold"].includes(ft)) return null;
+        if (field.hidden === 1) return null;
+
+        const val = editData[field.fieldname];
+        // In read-only mode, skip fields with no value
+        if (readOnly) {
+          const hasValue = val !== undefined && val !== null && val !== "" && val !== 0;
+          if (!hasValue) return null;
+        }
+
+        const meta = toFrappeFieldMeta(field);
+        return (
+          <FrappeField
+            key={field.fieldname}
+            field={meta}
+            value={val}
+            onChange={(v: any) => handleFieldChange(field.fieldname, v)}
+            showLabel
+            disabled={readOnly}
+          />
+        );
+      })
+      .filter(Boolean);
   };
 
   const renderSections = (sections: FormSection[]) => {
-    return sections.map((section, si) => {
-      const sectionKey = section.label || `section_${si}`;
-      const isCollapsed = collapsedSections[sectionKey] ?? false;
+    return sections
+      .map((section, si) => {
+        // In read-only mode, skip sections with no visible content
+        if (readOnly) {
+          const hasVisible = section.columns.some((col) =>
+            col.fields.some((f) => hasVisibleContent([f]))
+          );
+          if (!hasVisible) return null;
+        }
 
-      return (
-        <div key={si} className="mb-6 last:mb-0">
-          {section.label && (
-            <div className="flex items-center gap-2 mb-3 pb-1 border-b border-border">
-              {section.collapsible ? (
-                <button
-                  type="button"
-                  onClick={() => toggleSection(sectionKey)}
-                  className="flex items-center gap-1.5 text-sm font-semibold text-foreground hover:text-primary transition-colors"
-                >
-                  {isCollapsed ? (
-                    <ChevronRight className="size-4" />
-                  ) : (
-                    <ChevronDown className="size-4" />
-                  )}
-                  {section.label}
-                </button>
-              ) : (
-                <h4 className="text-sm font-semibold text-foreground">
-                  {section.label}
-                </h4>
-              )}
+        const sectionKey = section.label || `section_${si}`;
+        const isCollapsed = collapsedSections[sectionKey] ?? false;
+
+        const renderedColumns = section.columns.map((col, ci) => {
+          const renderedFields = renderFormFields(col.fields);
+          if (readOnly && renderedFields.length === 0) return null;
+          return (
+            <div key={ci} className="flex flex-col gap-3">
+              {renderedFields}
             </div>
-          )}
-          {(!section.collapsible || !isCollapsed) && (
-            <div
-              className={cn("grid gap-4", "grid-cols-1")}
-              style={
-                section.columns.length > 1
-                  ? ({
-                      gridTemplateColumns: `repeat(${Math.min(
-                        section.columns.length,
-                        3,
-                      )}, 1fr)`,
-                    } as React.CSSProperties)
-                  : undefined
-              }
-            >
-              {section.columns.map((col, ci) => (
-                <div key={ci} className="flex flex-col gap-3">
-                  {renderFormFields(col.fields)}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    });
+          );
+        }).filter(Boolean);
+
+        if (readOnly && renderedColumns.length === 0) return null;
+
+        return (
+          <div key={si} className="mb-6 last:mb-0">
+            {section.label && (
+              <div className="flex items-center gap-2 mb-3 pb-1 border-b border-border">
+                {section.collapsible ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(sectionKey)}
+                    className="flex items-center gap-1.5 text-sm font-semibold text-foreground hover:text-primary transition-colors"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="size-4" />
+                    ) : (
+                      <ChevronDown className="size-4" />
+                    )}
+                    {section.label}
+                  </button>
+                ) : (
+                  <h4 className="text-sm font-semibold text-foreground">
+                    {section.label}
+                  </h4>
+                )}
+              </div>
+            )}
+            {(!section.collapsible || !isCollapsed) && (
+              <div
+                className={cn("grid gap-4", "grid-cols-1")}
+                style={
+                  section.columns.length > 1
+                    ? ({
+                        gridTemplateColumns: `repeat(${Math.min(
+                          section.columns.length,
+                          3,
+                        )}, 1fr)`,
+                      } as React.CSSProperties)
+                    : undefined
+                }
+              >
+                {renderedColumns}
+              </div>
+            )}
+          </div>
+        );
+      })
+      .filter(Boolean);
   };
+
+  const title = readOnly ? "View Row" : "Edit Row";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -217,7 +264,10 @@ export const RowEditModal = ({
       `}</style>
       <DialogContent className="sm:max-w-3xl lg:max-w-4xl max-h-[90vh] overflow-y-auto border-primary/20 shadow-2xl">
         <DialogHeader>
-          <DialogTitle>Edit Row</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            {readOnly ? <Eye className="size-4" /> : <Pencil className="size-4" />}
+            {title}
+          </DialogTitle>
         </DialogHeader>
 
         {tabs.length > 1 ? (
@@ -238,21 +288,28 @@ export const RowEditModal = ({
         ) : (
           <div className="space-y-6">
             {tabs[0] && renderSections(tabs[0].sections)}
+            {readOnly && renderSections(tabs[0]?.sections || []).length === 0 && (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                No data to display.
+              </div>
+            )}
           </div>
         )}
 
-        <DialogFooter className="mt-6 pt-4 border-t border-border">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button type="button" onClick={handleSave}>
-            Save
-          </Button>
-        </DialogFooter>
+        {!readOnly && (
+          <DialogFooter className="mt-6 pt-4 border-t border-border">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleSave}>
+              Save
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
