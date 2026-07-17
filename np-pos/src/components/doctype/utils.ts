@@ -36,6 +36,7 @@ export const OPERATOR_OPTIONS: Record<string, { value: string; label: string }[]
   ],
 };
 
+/** Format a cell value for display based on fieldtype. */
 export function formatCellValue(value: any, fieldtype: string): string {
   if (value === null || value === undefined || value === "") return "—";
   switch (fieldtype) {
@@ -54,6 +55,7 @@ export function formatCellValue(value: any, fieldtype: string): string {
   }
 }
 
+/** Convert a date string to a human-friendly relative time label. */
 export function timeAgo(dateStr: string): string {
   if (!dateStr) return "—";
   const now = Date.now();
@@ -73,6 +75,7 @@ export function timeAgo(dateStr: string): string {
   return `${years}Y`;
 }
 
+/** Get operator options appropriate for a given fieldtype. */
 export function getOperatorsForFieldtype(fieldtype: string): { value: string; label: string }[] {
   switch (fieldtype) {
     case "Currency":
@@ -93,6 +96,7 @@ export function getOperatorsForFieldtype(fieldtype: string): { value: string; la
   }
 }
 
+/** Get appropriate HTML input type for a given fieldtype. */
 export function getInputTypeForFieldtype(fieldtype: string): string {
   switch (fieldtype) {
     case "Currency":
@@ -111,40 +115,49 @@ export function getInputTypeForFieldtype(fieldtype: string): string {
   }
 }
 
-/** Extract Tab Break fields from config fields to build the tab list. */
-export function generateTabList(fields: FrappeFieldMeta[]): { label: string; fieldname: string; show_dashboard: number; is_default?: boolean }[] {
+/** Extract Tab Break fields from schema fields to build the tab list. */
+export function generateTabList(
+  fields: FrappeFieldMeta[],
+): { label: string; fieldname: string; show_dashboard: number; is_default?: boolean }[] {
   if (!fields || !Array.isArray(fields)) return [];
 
   const tabs: { label: string; fieldname: string; show_dashboard: number; is_default?: boolean }[] = [];
   const hasTabBreaks = fields.some((f) => f.fieldtype === "Tab Break");
 
-  // If there are Tab Breaks but first field isn't one, create a default tab for leading fields
-  if (hasTabBreaks && fields[0]?.fieldtype !== "Tab Break") {
-    tabs.push({ label: "Details", fieldname: "tab_default_details", show_dashboard: 0, is_default: true });
-  }
-
-  fields.forEach((field) => {
-    if (field.fieldtype === "Tab Break") {
-      tabs.push({
-        label: field.label || field.fieldname,
-        fieldname: field.fieldname,
-        show_dashboard: (field as any).show_dashboard || 0,
-      });
+  if (hasTabBreaks) {
+    // Create a default tab for leading fields before the first Tab Break
+    if (fields[0]?.fieldtype !== "Tab Break") {
+      tabs.push({ label: "Details", fieldname: "tab_default_details", show_dashboard: 0, is_default: true });
     }
-  });
+
+    fields.forEach((field) => {
+      if (field.fieldtype === "Tab Break") {
+        tabs.push({
+          label: field.label || field.fieldname,
+          fieldname: field.fieldname,
+          show_dashboard: (field as any).show_dashboard || 0,
+        });
+      }
+    });
+  } else {
+    // No Tab Breaks — create a single default tab with all fields (section breaks work within it)
+    tabs.push({ label: "Details", fieldname: "tab_all", show_dashboard: 0, is_default: true });
+  }
 
   return tabs;
 }
 
 /** Returns sections/columns/fields for fields belonging to a given tab. */
-export function getFieldsForTab(fields: FrappeFieldMeta[], currentTab: { fieldname: string; is_default?: boolean }): SectionGroupV2[] {
+export function getFieldsForTab(
+  fields: FrappeFieldMeta[],
+  currentTab: { fieldname: string; is_default?: boolean },
+): SectionGroupV2[] {
   if (!fields || !Array.isArray(fields)) return [];
 
   const sections: SectionGroupV2[] = [];
   let currentSection: SectionGroupV2 | null = null;
   let currentColumn: ColumnGroup | null = null;
 
-  // Handle the default tab: captures fields before the first Tab Break
   if (currentTab?.is_default) {
     for (const field of fields) {
       if (field.fieldtype === "Tab Break") break;
@@ -181,29 +194,24 @@ export function getFieldsForTab(fields: FrappeFieldMeta[], currentTab: { fieldna
       }
       currentColumn.fields.push(field);
     }
-    // Clean up empty sections/columns
     return sections.filter((sec) => {
       sec.columns = sec.columns.filter((col) => col.fields.length > 0);
       return sec.columns.length > 0;
     });
   }
 
-  // Collect all tab break names in order
   const tabNames = fields.filter((f) => f.fieldtype === "Tab Break").map((f) => f.fieldname);
   const tabIdx = tabNames.indexOf(currentTab?.fieldname || "");
   if (tabIdx < 0) return [];
 
-  // Named tabs only capture AFTER their own Tab Break
   let captureActive = false;
   let tabBreaksSeen = 0;
 
   fields.forEach((field) => {
     if (field.fieldtype === "Tab Break") {
       if (tabBreaksSeen === tabIdx) {
-        // This is our tab's break - start capturing AFTER it
         captureActive = true;
       } else if (tabBreaksSeen > tabIdx) {
-        // Next tab's break - stop capturing
         captureActive = false;
       }
       tabBreaksSeen++;
@@ -235,11 +243,9 @@ export function getFieldsForTab(fields: FrappeFieldMeta[], currentTab: { fieldna
       return;
     }
 
-    // Skip non-data field types
     if (["Fold", "Page Break"].includes(field.fieldtype)) return;
     if (field.hidden) return;
 
-    // Ensure section and column exist
     if (!currentSection) {
       currentSection = { label: "", fieldname: `section_${Math.random().toString(36).substring(2, 6)}`, collapsible: false, collapsed: false, columns: [] };
       sections.push(currentSection);
@@ -252,7 +258,6 @@ export function getFieldsForTab(fields: FrappeFieldMeta[], currentTab: { fieldna
     currentColumn.fields.push(field);
   });
 
-  // Clean up empty sections/columns
   return sections.filter((sec) => {
     sec.columns = sec.columns.filter((col) => col.fields.length > 0);
     return sec.columns.length > 0;
@@ -268,6 +273,7 @@ export function buildTabs(fields: FrappeFieldMeta[]): TabConfig[] {
   }));
 }
 
+/** Get the default tab from a list of tabs, respecting URL hash. */
 export function getDefaultTab(tabs: TabConfig[]): string {
   if (tabs.length === 0) return "";
   const hash = window.location.hash.replace("#", "");
