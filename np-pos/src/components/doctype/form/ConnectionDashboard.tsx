@@ -1,3 +1,10 @@
+/**
+ * ConnectionDashboard – renders related-document link cards for a given doctype/docname.
+ *
+ * Fetches open-count data from Frappe and displays grouped transaction links with
+ * counts and quick-create buttons.
+ */
+
 "use client";
 
 import { motion } from "framer-motion";
@@ -11,112 +18,120 @@ interface ConnectionDashboardProps {
   metaConfig?: any;
 }
 
+function toSlug(dt: string): string {
+  return dt.toLowerCase().replace(/ /g, "-");
+}
+
+/** Build route_options for navigation: keeps dot-notation for list filters, plain fieldname for new-doc prefills. */
+function buildRouteOptions(
+  docname: string | undefined,
+  fieldname: string,
+  nonStandardFieldnames: Record<string, string>,
+  dynamicLinks: Record<string, [string, string]>,
+  targetDoctype: string,
+  isNew: boolean,
+): Record<string, string> {
+  const opts: Record<string, string> = {};
+  if (!docname) return opts;
+
+  const linkField = nonStandardFieldnames[targetDoctype] || fieldname;
+
+  if (dynamicLinks && dynamicLinks[linkField]) {
+    const [refDoctypeValue, refDoctypeField] = dynamicLinks[linkField];
+    opts[linkField] = docname;
+    opts[refDoctypeField] = refDoctypeValue;
+  } else if (isNew || !linkField.includes(".")) {
+    const cleanField = linkField.includes(".") ? linkField.split(".")[1] : linkField;
+    opts[cleanField] = docname;
+  } else {
+    opts[linkField] = docname;
+  }
+  return opts;
+}
+
+/** Build an object with dashboard metadata extracted from metaConfig. */
+function extractDashboardMeta(metaConfig: any) {
+  const dashboard = metaConfig?.__dashboard || {};
+  return {
+    fieldname: dashboard.fieldname || "customer",
+    nonStandardFieldnames: dashboard.non_standard_fieldnames || {},
+    transactions: dashboard.transactions || [],
+    internalLinks: dashboard.internal_links || {},
+    dynamicLinks: dashboard.dynamic_links || {},
+  };
+}
+
 export function ConnectionDashboard({
   doctype,
   docname,
   metaConfig,
 }: ConnectionDashboardProps) {
   const navigate = useNavigate();
-  const dashboardMeta = metaConfig?.__dashboard || {};
   const {
-    fieldname = "customer",
-    non_standard_fieldnames = {},
-    transactions = [],
-    internal_links = {},
-    dynamic_links = {},
-  } = dashboardMeta;
+    fieldname,
+    nonStandardFieldnames,
+    transactions,
+    internalLinks,
+    dynamicLinks,
+  } = extractDashboardMeta(metaConfig);
 
-  // 1. Gather all trackable doctypes across active groups (Lazy fetch optimization array payload)
   const trackableItems = transactions.reduce((acc: string[], group: any) => {
-    if (group?.items) {
-      acc.push(...group.items);
-    }
+    if (group?.items) acc.push(...group.items);
     return acc;
   }, []);
 
   const hasDoc = !!(doctype && docname && trackableItems.length > 0);
 
-  // 2. Fetch runtime link counters mirroring frappe.desk.notifications.get_open_count
   const { data: notificationData } = useFrappeGetCall(
     hasDoc ? "frappe.desk.notifications.get_open_count" : null,
     hasDoc
-      ? {
-          doctype: doctype,
-          name: docname!,
-          items: trackableItems,
-        }
+      ? { doctype, name: docname!, items: trackableItems }
       : null,
     hasDoc
-      ? `conn-dash-${doctype}-${docname}-${trackableItems.join(",")}`
+      ? (`conn-dash-${doctype}-${docname!}-${trackableItems.join(",")}` as string)
       : null,
   );
 
   const countData = notificationData?.message?.count || {};
   const externalLinks: any[] = countData?.external_links_found || [];
-  const internalLinks: any[] = countData?.internal_links_found || [];
-  const combinedLinks = [...externalLinks, ...internalLinks];
+  const internalLinksFound: any[] = countData?.internal_links_found || [];
+  const combinedLinks = [...externalLinks, ...internalLinksFound];
 
   if (combinedLinks.length === 0) return null;
 
-  const linkMap = new Map(
-    combinedLinks.map((link: any) => [link.doctype, link]),
-  );
+  const linkMap = new Map(combinedLinks.map((link: any) => [link.doctype, link]));
 
-  const toSlug = (dt: string) => dt.toLowerCase().replace(/ /g, "-");
-
-  // Build route_options for a target doctype (Frappe pattern)
-  // For list filtering: keep full dot notation for child table fields (e.g. "Child Table.fieldname")
-  // For new doc prefill: use plain fieldname only
-  const getRouteOptions = (targetDoctype: string, isNew = false) => {
-    const opts: Record<string, string> = {};
-    if (!docname) return opts;
-
-    const linkField = non_standard_fieldnames[targetDoctype] || fieldname;
-
-    if (dynamic_links && dynamic_links[linkField]) {
-      const [refDoctypeValue, refDoctypeField] = dynamic_links[linkField];
-      opts[linkField] = docname;
-      opts[refDoctypeField] = refDoctypeValue;
-    } else if (isNew || !linkField.includes(".")) {
-      // For new doc or simple fields: use clean fieldname
-      const cleanField = linkField.includes(".")
-        ? linkField.split(".")[1]
-        : linkField;
-      opts[cleanField] = docname;
-    } else {
-      // For list filtering with child table fields: keep full dot notation
-      opts[linkField] = docname;
-    }
-    return opts;
-  };
-
-  // Navigate to list view with route_options (Frappe pattern: set route_options, then navigate)
   const handleNavigateToList = (targetDoctype: string) => {
     const slug = toSlug(targetDoctype);
-    const matchedLinkData = linkMap.get(targetDoctype);
+    const matched = linkMap.get(targetDoctype);
 
-    // Internal child links with explicit record collections
-    if (matchedLinkData?.names && matchedLinkData.names.length > 0) {
+    if (matched?.names && matched.names.length > 0) {
       navigate(`/app/${slug}`, {
-        state: { routeOptions: { name: matchedLinkData.names.join(",") } },
+        state: { routeOptions: { name: matched.names.join(",") } },
       });
       return;
     }
 
     navigate(`/app/${slug}`, {
-      state: { routeOptions: getRouteOptions(targetDoctype) },
+      state: {
+        routeOptions: buildRouteOptions(
+          docname, fieldname, nonStandardFieldnames, dynamicLinks, targetDoctype, false,
+        ),
+      },
     });
   };
 
-  // Navigate to new doc with route_options for prefilling (Frappe pattern)
   const handleNavigateToNew = (targetDoctype: string) => {
     const slug = toSlug(targetDoctype);
     navigate(`/app/${slug}/new`, {
-      state: { routeOptions: getRouteOptions(targetDoctype, true) },
+      state: {
+        routeOptions: buildRouteOptions(
+          docname, fieldname, nonStandardFieldnames, dynamicLinks, targetDoctype, true,
+        ),
+      },
     });
   };
 
-  // Only render active transaction groups populated in the count state matrix
   const activeSections = transactions.filter((section: any) =>
     section.items.some((item: string) => linkMap.has(item)),
   );
@@ -132,9 +147,7 @@ export function ConnectionDashboard({
     >
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {activeSections.map((section: any) => {
-          const visibleItems = section.items.filter((item: string) =>
-            linkMap.has(item),
-          );
+          const visibleItems = section.items.filter((item: string) => linkMap.has(item));
           if (visibleItems.length === 0) return null;
 
           return (
@@ -147,8 +160,7 @@ export function ConnectionDashboard({
                   const link = linkMap.get(item);
                   const hasCount = link.count > 0 || link.open_count > 0;
                   const isLinkDisabled =
-                    internal_links[item] &&
-                    (!link.names || link.names.length === 0);
+                    internalLinks[item] && (!link.names || link.names.length === 0);
 
                   return (
                     <div
@@ -174,9 +186,7 @@ export function ConnectionDashboard({
                       <div className="flex items-center gap-1.5 ml-2 shrink-0">
                         <span
                           className={`font-semibold ${
-                            hasCount
-                              ? "text-foreground"
-                              : "text-muted-foreground"
+                            hasCount ? "text-foreground" : "text-muted-foreground"
                           }`}
                         >
                           {link.count || 0}
