@@ -1,6 +1,14 @@
-/** Data table with sticky left checkbox and sticky right group using shadcn theme. */
+/**
+ * DataTable – table component with sticky left checkbox column and sticky right action group.
+ *
+ * Key dependencies: @tanstack/react-table for rendering, shadcn/ui Card/Table for layout.
+ * The right sticky group (modified time, comments, likes) is pinned at a fixed width.
+ */
+
+import { type Table as TanTable, flexRender } from "@tanstack/react-table";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -10,8 +18,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { flexRender, type Table as TanTable } from "@tanstack/react-table";
-import { Loader2 } from "lucide-react";
 
 const RIGHT_IDS = ["_modified", "_comments", "_liked"];
 const STICKY_W = 120;
@@ -96,17 +102,36 @@ export function DataTable({
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={totalCols + 1}
-                    className="text-center py-16 bg-background"
-                  >
-                    <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      Loading...
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="px-3 py-2.5 bg-background sticky left-0 z-10">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="h-4 w-4 rounded" />
+                          <Skeleton className="h-4 w-32" />
+                        </div>
+                      </TableCell>
+                      {Array.from({ length: Math.min(totalCols - 1, 4) }).map(
+                        (_, j) => (
+                          <TableCell key={j} className="px-3 py-2.5">
+                            <Skeleton
+                              className="h-4"
+                              style={{
+                                width: `${[60, 80, 100, 70][j % 4]}px`,
+                              }}
+                            />
+                          </TableCell>
+                        ),
+                      )}
+                      <TableCell className="px-3 py-2.5 sticky right-0 z-10 bg-background">
+                        <div className="flex items-center justify-center gap-1">
+                          <Skeleton className="h-4 w-4 rounded" />
+                          <Skeleton className="h-4 w-4 rounded" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </>
               ) : rows.length === 0 ? (
                 <TableRow>
                   <TableCell
