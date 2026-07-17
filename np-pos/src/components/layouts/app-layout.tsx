@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { useSidebarConfig } from "@/hooks/use-sidebar-config";
 import { useUser } from "@/contexts/user-context";
+import { PermissionGuard } from "@/app/auth/permission-guard";
 
 /** Placeholder content matching the app layout's content area dimensions for use during authentication resolution. */
 function SkeletonContent() {
@@ -92,9 +93,11 @@ export function AppLayout() {
 
   return (
     <LayoutShell>
-      <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-        <Outlet />
-      </div>
+      <PermissionGuard>
+        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+          <Outlet />
+        </div>
+      </PermissionGuard>
     </LayoutShell>
   );
 }

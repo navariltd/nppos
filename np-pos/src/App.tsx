@@ -7,6 +7,7 @@ import { FrappeProvider } from "frappe-react-sdk";
 import { BrowserRouter as Router } from "react-router-dom";
 
 const basename = "np-pos";
+
 function getInitialSidebarOpen(): boolean {
   if (typeof document === "undefined") return false;
   const match = document.cookie.match(/(?:^|;\s*)sidebar_state=([^;]*)/);
@@ -15,11 +16,8 @@ function getInitialSidebarOpen(): boolean {
 
 function App() {
   return (
-    <div
-      className="font-sans antialiased"
-      style={{ fontFamily: "var(--font-inter)" }}
-    >
-      <FrappeProvider enableSocket={false}>
+    <div className="font-sans antialiased" style={{ fontFamily: "var(--font-inter)" }}>
+      <FrappeProvider enableSocket={false} swrConfig={{ revalidateOnFocus: false, revalidateOnReconnect: false }}>
         <UserProvider>
           <ThemeProvider defaultTheme="system" storageKey="np-pos-theme">
             <SidebarConfigProvider>

@@ -100,8 +100,12 @@ export const routes: RouteConfig[] = [
       },
       {
         path: "settings",
-        element: <AppLayout />,
+        element: <div className="px-4 lg:px-6 space-y-6 pb-8"><Outlet /></div>,
         children: [
+          {
+            path: "",
+            element: <Navigate to="user" replace />,
+          },
           {
             path: "user",
             element: <UserSettings />,
