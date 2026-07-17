@@ -24,6 +24,10 @@ const GoodsHampers = lazy(() => import("@/app/pos/goods-hampers/page"));
 const ClosingEntry = lazy(() => import("@/app/pos/closing-entry/page"));
 const Playground = lazy(() => import("@/app/pos/playground/page"));
 
+// Dynamic doctype pages (generic list/detail for doctypes)
+const DocTypeListPage = lazy(() => import("@/app/doctype/DocTypeListPage"));
+const DocTypeFormPage = lazy(() => import("@/app/doctype/DocTypeFormPage"));
+
 const UserSettings = lazy(() => import("@/app/settings/user/page"));
 const AccountSettings = lazy(() => import("@/app/settings/account/page"));
 const NotificationSettings = lazy(
@@ -75,6 +79,16 @@ export const routes: RouteConfig[] = [
           { path: "closing-entry", element: <ClosingEntry /> },
           { path: "playground", element: <Playground /> },
         ],
+      },
+      // Dynamic doctype routes
+      // e.g. /app/pos-closing-entry or /app/pos-closing-entry/SAL-2024-00001
+      {
+        path: "app/:doctype",
+        element: <DocTypeListPage />,
+      },
+      {
+        path: "app/:doctype/:id",
+        element: <DocTypeFormPage />,
       },
       {
         path: "users",
