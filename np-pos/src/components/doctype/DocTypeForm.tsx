@@ -1,7 +1,7 @@
 /**
  * DocTypeForm – full document form for any Frappe doctype, with save/submit/cancel and tabbed layout.
  *
- * Key dependencies: uses Frappe React SDK for API calls, renders via TabbedForm for the field layout.
+ * Key dependencies: frappe-react-sdk for API calls, TabbedForm for field layout, ConfirmationDialogs.
  */
 
 "use client";
@@ -13,21 +13,12 @@ import { toast } from "sonner";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUser } from "@/contexts/user-context";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import type { FrappeFieldMeta } from "./types";
+import { ConfirmCancelDialog, ConfirmSubmitDialog } from "./form/ConfirmationDialogs";
 import { FormHeader } from "./form/FormHeader";
 import { TabbedForm } from "./form/TabbedForm";
-import { parseFrappeError } from "./form/parse-error";
+import { isPermissionError, parseFrappeError } from "./form/parse-error";
 import { useFormActions } from "./form/form-actions";
+import type { FrappeFieldMeta } from "./types";
 
 interface DocTypeFormProps {
   doctype: string;
@@ -38,72 +29,6 @@ interface DocTypeFormProps {
 }
 
 type ConfirmAction = "submit" | "cancel" | null;
-
-function ConfirmSubmitDialog({
-  open,
-  onOpenChange,
-  doctypeLabel,
-  isSubmitting,
-  onConfirm,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  doctypeLabel: string;
-  isSubmitting: boolean;
-  onConfirm: () => void;
-}) {
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Submit {doctypeLabel}</AlertDialogTitle>
-          <AlertDialogDescription>
-            Are you sure you want to submit this document? Once submitted, it cannot be edited.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm} disabled={isSubmitting}>
-            {isSubmitting ? "Submitting..." : "Submit"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
-
-function ConfirmCancelDialog({
-  open,
-  onOpenChange,
-  doctypeLabel,
-  isCancelling,
-  onConfirm,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  doctypeLabel: string;
-  isCancelling: boolean;
-  onConfirm: () => void;
-}) {
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Cancel {doctypeLabel}</AlertDialogTitle>
-          <AlertDialogDescription>
-            Are you sure you want to cancel this document? This action cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>No, keep it</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={onConfirm} disabled={isCancelling}>
-            {isCancelling ? "Cancelling..." : "Yes, cancel"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
 
 export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, onSuccess, onBack }: DocTypeFormProps) {
   const navigate = useNavigate();
@@ -217,6 +142,10 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
       return;
     }
     if (docError) {
+      if (isPermissionError(docError)) {
+        navigate("/errors/forbidden", { replace: true });
+        return;
+      }
       const msg = parseFrappeError(docError);
       setError(msg);
       toast.error(msg);
