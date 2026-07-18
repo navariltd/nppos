@@ -21,6 +21,8 @@ const CashVouchers = lazy(() => import("@/app/pos/cash-vouchers/page"));
 const AtmCard = lazy(() => import("@/app/pos/atm-card/page"));
 const TransactionHistory = lazy(() => import("@/app/pos/transactions/page"));
 const GoodsHampers = lazy(() => import("@/app/pos/goods-hampers/page"));
+const SearchVoucher = lazy(() => import("@/app/pos/search/page"));
+const IssueEntitlement = lazy(() => import("@/app/pos/issue-entitlement/page"));
 const ClosingEntry = lazy(() => import("@/app/pos/closing-entry/page"));
 const Playground = lazy(() => import("@/app/pos/playground/page"));
 
@@ -71,11 +73,13 @@ export const routes: RouteConfig[] = [
         path: "pos",
         element: <POSLayout />,
         children: [
-          { path: "", element: <Dashboard /> },
+          { path: "", element: <Navigate to="search" replace /> },
           { path: "goods-hampers", element: <GoodsHampers /> },
           { path: "cash-vouchers", element: <CashVouchers /> },
           { path: "atm-card", element: <AtmCard /> },
           { path: "transactions", element: <TransactionHistory /> },
+          { path: "search", element: <SearchVoucher /> },
+          { path: "issue-entitlement", element: <IssueEntitlement /> },
           { path: "closing-entry", element: <ClosingEntry /> },
           { path: "playground", element: <Playground /> },
         ],
