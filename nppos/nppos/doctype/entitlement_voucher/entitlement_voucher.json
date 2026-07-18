@@ -39,6 +39,31 @@
   "amount",
   "section_break_mpmv",
   "description",
+  "more_info_tab",
+  "printing_settings_section",
+  "letter_head",
+  "group_same_items",
+  "language",
+  "column_break_hlvk",
+  "select_print_heading",
+  "section_break_wsis",
+  "paid_from",
+  "paid_from_account_currency",
+  "paid_to",
+  "paid_to_account_currency",
+  "column_break_fvlg",
+  "bank_account",
+  "party_bank_account",
+  "party_bank_account_name",
+  "party_bank_account_no",
+  "commission_section",
+  "sales_partner",
+  "column_break_yxns",
+  "amount_eligible_for_commission",
+  "commission_rate",
+  "total_commission",
+  "sales_team_section",
+  "sales_team",
   "section_break_vr6m",
   "amended_from"
  ],
@@ -268,6 +293,143 @@
    "fieldtype": "Currency",
    "label": "Rate",
    "mandatory_depends_on": "eval: doc.entitlement_type == \"Cash\""
+  },
+  {
+   "fieldname": "more_info_tab",
+   "fieldtype": "Tab Break",
+   "label": "More Info"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "printing_settings_section",
+   "fieldtype": "Section Break",
+   "label": "Printing Settings"
+  },
+  {
+   "fieldname": "letter_head",
+   "fieldtype": "Link",
+   "label": "Letter Head",
+   "options": "Letter Head"
+  },
+  {
+   "default": "0",
+   "fieldname": "group_same_items",
+   "fieldtype": "Check",
+   "label": "Group same items"
+  },
+  {
+   "fieldname": "language",
+   "fieldtype": "Data",
+   "label": "Print Language"
+  },
+  {
+   "fieldname": "column_break_hlvk",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "select_print_heading",
+   "fieldtype": "Link",
+   "label": "Print Heading",
+   "options": "Print Heading"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_wsis",
+   "fieldtype": "Section Break",
+   "label": "Accounting Details"
+  },
+  {
+   "fieldname": "paid_from",
+   "fieldtype": "Link",
+   "label": "Account Paid From",
+   "options": "Account"
+  },
+  {
+   "fieldname": "paid_from_account_currency",
+   "fieldtype": "Link",
+   "label": "Account Currency (From)",
+   "options": "Currency"
+  },
+  {
+   "fieldname": "paid_to",
+   "fieldtype": "Link",
+   "label": "Account Paid To",
+   "options": "Account"
+  },
+  {
+   "fieldname": "paid_to_account_currency",
+   "fieldtype": "Link",
+   "label": "Account Currency (To)",
+   "options": "Currency"
+  },
+  {
+   "fieldname": "column_break_fvlg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "bank_account",
+   "fieldtype": "Link",
+   "label": "Company Bank Account",
+   "options": "Bank Account"
+  },
+  {
+   "fieldname": "party_bank_account",
+   "fieldtype": "Link",
+   "label": "Party Bank Account",
+   "options": "Bank Account"
+  },
+  {
+   "fieldname": "party_bank_account_name",
+   "fieldtype": "Data",
+   "label": "Party Bank Account Name"
+  },
+  {
+   "fieldname": "party_bank_account_no",
+   "fieldtype": "Data",
+   "label": "Party Bank Account No"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "commission_section",
+   "fieldtype": "Section Break",
+   "label": "Commission"
+  },
+  {
+   "fieldname": "sales_partner",
+   "fieldtype": "Link",
+   "label": "Sales Partner",
+   "options": "Sales Partner"
+  },
+  {
+   "fieldname": "column_break_yxns",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "amount_eligible_for_commission",
+   "fieldtype": "Currency",
+   "label": "Amount Eligible for Commission"
+  },
+  {
+   "fieldname": "commission_rate",
+   "fieldtype": "Float",
+   "label": "Commission Rate (%)"
+  },
+  {
+   "fieldname": "total_commission",
+   "fieldtype": "Currency",
+   "label": "Total Commission"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "sales_team_section",
+   "fieldtype": "Section Break",
+   "label": "Sales Team"
+  },
+  {
+   "fieldname": "sales_team",
+   "fieldtype": "Table",
+   "label": "Sales Team",
+   "options": "Sales Team"
   }
  ],
  "grid_page_length": 50,
@@ -290,7 +452,7 @@
    "link_fieldname": "entitlement_voucher"
   }
  ],
- "modified": "2026-07-03 02:04:15.443269",
+ "modified": "2026-07-17 21:00:00.000000",
  "modified_by": "Administrator",
  "module": "NPPOS",
  "name": "Entitlement Voucher",
