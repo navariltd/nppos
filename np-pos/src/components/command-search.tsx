@@ -1,105 +1,29 @@
 "use client";
 
-import { Command as CommandPrimitive } from "cmdk";
-import { FileSearch, Search } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  FileSearch,
+  FolderOpen,
+  Search,
+  Tags,
+  X,
+} from "lucide-react";
+import { useFrappeGetCall } from "frappe-react-sdk";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { routes, type RouteConfig } from "@/config/routes";
-import { cn } from "@/lib/utils";
-
-const Command = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive
-    ref={ref}
-    className={cn(
-      "flex h-full w-full flex-col overflow-hidden rounded-xl bg-white dark:bg-zinc-950 text-zinc-950 dark:text-zinc-50",
-      className,
-    )}
-    {...props}
-  />
-));
-Command.displayName = CommandPrimitive.displayName;
-
-const CommandInput = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Input>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive.Input
-    ref={ref}
-    className={cn(
-      "flex h-12 w-full border-none bg-transparent px-4 py-3 text-[17px] outline-none placeholder:text-zinc-500 dark:placeholder:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800 mb-4",
-      className,
-    )}
-    {...props}
-  />
-));
-CommandInput.displayName = CommandPrimitive.Input.displayName;
-
-const CommandList = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.List>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive.List
-    ref={ref}
-    className={cn(
-      "max-h-[400px] overflow-y-auto overflow-x-hidden pb-2",
-      className,
-    )}
-    {...props}
-  />
-));
-CommandList.displayName = CommandPrimitive.List.displayName;
-
-const CommandEmpty = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Empty>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Empty>
->((props, ref) => (
-  <CommandPrimitive.Empty
-    ref={ref}
-    className="flex h-12 items-center justify-center text-sm text-zinc-500 dark:text-zinc-400"
-    {...props}
-  />
-));
-CommandEmpty.displayName = CommandPrimitive.Empty.displayName;
-
-const CommandGroup = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Group>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Group>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive.Group
-    ref={ref}
-    className={cn(
-      "overflow-hidden px-2 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-zinc-500 dark:[&_[cmdk-group-heading]]:text-zinc-400 [&:not(:first-child)]:mt-2",
-      className,
-    )}
-    {...props}
-  />
-));
-CommandGroup.displayName = CommandPrimitive.Group.displayName;
-
-const CommandItem = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive.Item
-    ref={ref}
-    className={cn(
-      "relative flex h-12 cursor-pointer select-none items-center gap-2 rounded-lg px-4 text-sm text-zinc-700 dark:text-zinc-300 outline-none transition-colors data-[disabled=true]:pointer-events-none data-[selected=true]:bg-zinc-100 dark:data-[selected=true]:bg-zinc-800 data-[selected=true]:text-zinc-900 dark:data-[selected=true]:text-zinc-100 data-[disabled=true]:opacity-50 [&+[cmdk-item]]:mt-1",
-      className,
-    )}
-    {...props}
-  />
-));
-CommandItem.displayName = CommandPrimitive.Item.displayName;
 
 interface SearchItem {
   title: string;
-  url: string;
+  url?: string;
   group: string;
+  /** For global search results */
+  doctype?: string;
+  name?: string;
+  description?: string;
+  route?: string;
 }
 
 interface CommandSearchProps {
@@ -110,22 +34,10 @@ interface CommandSearchProps {
 function formatTitle(path: string): string {
   const segments = path.split("/").filter(Boolean);
   const lastSegment = segments[segments.length - 1] || "home";
-
   return lastSegment
     .split("-")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
-}
-
-function formatGroup(path: string): string {
-  const segments = path.split("/").filter(Boolean);
-
-  if (segments.length === 0) return "General";
-  if (segments.length === 1) {
-    return segments[0].charAt(0).toUpperCase() + segments[0].slice(1);
-  }
-
-  return segments[0].charAt(0).toUpperCase() + segments[0].slice(1);
 }
 
 function getSearchItemsFromRoutes(): SearchItem[] {
@@ -138,21 +50,18 @@ function getSearchItemsFromRoutes(): SearchItem[] {
 
     if (
       path === "*" ||
-      (route.element && route.element.type?.name === "Navigate")
+      ((route.element as any)?.type?.name === "Navigate")
     ) {
       return;
     }
 
-    if (fullPath && !visitedPaths.has(fullPath)) {
+    if (fullPath && !visitedPaths.has(fullPath) && fullPath !== "/") {
       visitedPaths.add(fullPath);
-
-      if (fullPath && fullPath !== "/") {
-        items.push({
-          title: formatTitle(fullPath),
-          url: fullPath,
-          group: formatGroup(fullPath),
-        });
-      }
+      items.push({
+        title: formatTitle(fullPath),
+        url: fullPath,
+        group: "App Pages",
+      });
     }
 
     if (route.children) {
@@ -166,74 +75,609 @@ function getSearchItemsFromRoutes(): SearchItem[] {
 
 export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
   const navigate = useNavigate();
-  const commandRef = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const listContainerRef = React.useRef<HTMLDivElement>(null);
 
-  const searchItems = React.useMemo(() => getSearchItemsFromRoutes(), []);
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const [selectedDocType, setSelectedDocType] = React.useState("All");
+  const [focusedIndex, setFocusedIndex] = React.useState(0);
+  const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
+  const [limit, setLimit] = React.useState(100);
+  const [start, setStart] = React.useState(0);
+  const [allowedDocTypes, setAllowedDocTypes] = React.useState<string[]>([]);
 
-  const groupedItems = searchItems.reduce(
-    (acc, item) => {
-      if (!acc[item.group]) {
-        acc[item.group] = [];
-      }
-      acc[item.group].push(item);
-      return acc;
-    },
-    {} as Record<string, SearchItem[]>,
+  const queryTerm = searchTerm.trim().replace(/\s\s+/g, " ");
+  const shouldSearch = queryTerm.length > 1;
+
+  // Fetch allowed doctypes from Global Search Settings
+  const { data: settingsData } = useFrappeGetCall(
+    open ? "frappe.client.get" : null,
+    open
+      ? { doctype: "Global Search Settings", name: "Global Search Settings" }
+      : {},
+    open ? "global-search-settings" : undefined as string | undefined,
   );
 
-  const handleSelect = (url: string) => {
-    navigate(url);
-    onOpenChange(false);
-    if (commandRef.current) {
-      commandRef.current.style.transform = "scale(0.96)";
-      setTimeout(() => {
-        if (commandRef.current) {
-          commandRef.current.style.transform = "";
-        }
-      }, 100);
+  React.useEffect(() => {
+    if (settingsData?.message?.allowed_in_global_search) {
+      const types = (settingsData.message.allowed_in_global_search as any[]).map(
+        (item: any) => item.document_type,
+      );
+      setAllowedDocTypes(types);
+    }
+  }, [settingsData]);
+
+  // Fetch global search results from Frappe
+  const searchParams: Record<string, any> = {
+    text: queryTerm,
+    limit: limit,
+    start: start,
+  };
+  if (selectedDocType !== "All") {
+    searchParams.doctype = selectedDocType;
+  }
+
+  const { data: searchResponse, isValidating: isSearching } = useFrappeGetCall(
+    shouldSearch ? "frappe.utils.global_search.search" : null,
+    searchParams,
+    shouldSearch
+      ? `awesomebar-${selectedDocType}-${queryTerm}-${start}-${limit}`
+      : undefined as string | undefined,
+  );
+
+  React.useEffect(() => {
+    setStart(0);
+  }, [searchTerm, selectedDocType, limit]);
+
+  // Focus input when modal opens
+  React.useEffect(() => {
+    if (open && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [open]);
+
+  // Reset when dialog closes
+  React.useEffect(() => {
+    if (!open) {
+      setSearchTerm("");
+      setSelectedDocType("All");
+      setStart(0);
+      setFocusedIndex(0);
+    }
+  }, [open]);
+
+  // Build the filtered and grouped results
+  const routeItems = React.useMemo(() => getSearchItemsFromRoutes(), []);
+
+  const filteredRouteItems = React.useMemo(() => {
+    if (!queryTerm) return routeItems;
+    const lower = queryTerm.toLowerCase();
+    return routeItems.filter(
+      (item) =>
+        item.title.toLowerCase().includes(lower) ||
+        (item.url && item.url.toLowerCase().includes(lower)),
+    );
+  }, [routeItems, queryTerm]);
+
+  const filteredOptions = React.useMemo(() => {
+    const allItems: SearchItem[] = [];
+
+    // Add matched route items (always show when not searching, filtered when searching)
+    if (!shouldSearch) {
+      // No search term - show all routes
+      allItems.push(...routeItems);
+    } else {
+      // Has search term - show filtered routes + global results
+      allItems.push(...filteredRouteItems);
+      const globalResults = (searchResponse?.message as any[]) || [];
+      for (const item of globalResults) {
+        allItems.push({
+          title: item.title || item.name,
+          name: item.name,
+          doctype: item.doctype,
+          description: item.content?.replace(/\|\|\|/g, " • ") || "",
+          route: item.route,
+          group: item.doctype || "Other",
+        });
+      }
+    }
+
+    // Group by group name
+    const grouped: Record<string, SearchItem[]> = {};
+    for (const item of allItems) {
+      const type = item.group;
+      if (selectedDocType !== "All" && type !== selectedDocType) {
+        continue;
+      }
+      if (!grouped[type]) grouped[type] = [];
+      grouped[type].push(item);
+    }
+
+    // Sort groups with selectedDocType first, then "App Pages", then alphabetical
+    const sortedGroups = Object.keys(grouped).sort((a, b) => {
+      if (a === selectedDocType) return -1;
+      if (b === selectedDocType) return 1;
+      if (a === "App Pages") return -1;
+      if (b === "App Pages") return 1;
+      return a.localeCompare(b);
+    });
+
+    const sorted: Record<string, SearchItem[]> = {};
+    for (const key of sortedGroups) {
+      sorted[key] = grouped[key];
+    }
+    return sorted;
+  }, [shouldSearch, routeItems, filteredRouteItems, searchResponse, selectedDocType]);
+
+  // Flatten all visible (non-collapsed) items for keyboard navigation
+  const flattenedOptions = React.useMemo(() => {
+    return Object.entries(filteredOptions)
+      .filter(([docType]) => !collapsedGroups[docType])
+      .flatMap(([, items]) => items);
+  }, [filteredOptions, collapsedGroups]);
+
+  const hasResults = Object.keys(filteredOptions).length > 0;
+
+  // Keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      onOpenChange(false);
+      return;
+    }
+
+    if (flattenedOptions.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setFocusedIndex((prev) => (prev + 1) % flattenedOptions.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setFocusedIndex(
+        (prev) =>
+          (prev - 1 + flattenedOptions.length) % flattenedOptions.length,
+      );
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (flattenedOptions[focusedIndex]) {
+        handleSelectOption(flattenedOptions[focusedIndex]);
+      }
     }
   };
 
+  // Auto-scroll focused item into view
+  React.useEffect(() => {
+    if (listContainerRef.current) {
+      const activeElement = listContainerRef.current.querySelector(
+        "[data-active='true']",
+      );
+      if (activeElement) {
+        activeElement.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }, [focusedIndex]);
+
+  function doctypeToUrl(dt: string): string {
+    return dt
+      .replace(/([A-Z])/g, " $1")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-");
+  }
+
+  const handleSelectOption = (option: SearchItem) => {
+    if (option.url) {
+      navigate(option.url);
+    } else if (option.route) {
+      navigate(option.route);
+    } else if (option.doctype && option.name) {
+      navigate(`/app/${doctypeToUrl(option.doctype)}/${option.name}`);
+    }
+    onOpenChange(false);
+  };
+
+  const toggleGroupCollapse = (group: string) => {
+    setCollapsedGroups((prev) => ({
+      ...prev,
+      [group]: !prev[group],
+    }));
+  };
+
+  // Compute which doctype filter pills to show
+  const reorderedDocTypes = React.useMemo(() => {
+    return [...allowedDocTypes].sort((a, b) => {
+      const aHasResults = filteredOptions[a] !== undefined;
+      const bHasResults = filteredOptions[b] !== undefined;
+      if (aHasResults && !bHasResults) return -1;
+      if (!aHasResults && bHasResults) return 1;
+      return 0;
+    });
+  }, [allowedDocTypes, filteredOptions]);
+
+  if (!open) return null;
+
+  let globalItemIndex = 0;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="overflow-hidden p-0 shadow-2xl border border-zinc-200 dark:border-zinc-800 max-w-[640px]">
-        <DialogTitle className="sr-only">Command Search</DialogTitle>
-        <Command
-          ref={commandRef}
-          className="transition-transform duration-100 ease-out"
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-start justify-center pt-[5vh]"
+      onClick={() => onOpenChange(false)}
+    >
+      <div
+        className="bg-white dark:bg-zinc-950 w-full max-w-7xl rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden mx-4 flex flex-col h-[85vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Search Input */}
+        <div className="flex items-center justify-between p-5 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
+          <div className="flex items-center gap-x-4 grow">
+            <Search className="text-primary w-5 h-5 shrink-0" />
+            <input
+              ref={inputRef}
+              type="text"
+              className="w-full text-lg text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none bg-transparent"
+              placeholder="Search..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setFocusedIndex(0);
+              }}
+              onKeyDown={handleKeyDown}
+            />
+          </div>
+          <button
+            onClick={() => onOpenChange(false)}
+            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 p-1 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* DocType Filter Pills */}
+        {reorderedDocTypes.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 p-3 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
+            <button
+              onClick={() => setSelectedDocType("All")}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all shrink-0 ${
+                selectedDocType === "All"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700"
+              }`}
+            >
+              All Results
+            </button>
+            {reorderedDocTypes.map((type) => {
+              const isSelected = selectedDocType === type;
+              const hasMatches = filteredOptions[type] !== undefined;
+              return (
+                <button
+                  key={type}
+                  onClick={() => setSelectedDocType(type)}
+                  className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all shrink-0 relative ${
+                    isSelected
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : hasMatches
+                        ? "bg-primary/10 text-primary border border-primary/30 shadow-sm font-bold ring-2 ring-primary/20"
+                        : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700"
+                  }`}
+                >
+                  {type}
+                  {hasMatches && !isSelected && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Results Area */}
+        <div
+          ref={listContainerRef}
+          className="overflow-y-auto p-6 bg-zinc-50/40 dark:bg-zinc-950/40 grow scroll-smooth"
         >
-          <CommandInput placeholder="What do you need?" autoFocus />
-          <CommandList>
-            <CommandEmpty>No results found.</CommandEmpty>
-            {Object.entries(groupedItems).map(([group, items]) => (
-              <CommandGroup key={group} heading={group}>
-                {items.map((item) => (
-                  <CommandItem
-                    key={item.url}
-                    value={item.title}
-                    onSelect={() => handleSelect(item.url)}
-                  >
-                    <FileSearch className="mr-2 h-4 w-4" />
-                    {item.title}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ))}
-          </CommandList>
-        </Command>
-      </DialogContent>
-    </Dialog>
+          {shouldSearch ? (
+            hasResults ? (
+              <div className="flex flex-col gap-y-6 max-w-none">
+                {Object.entries(filteredOptions).map(([group, items]) => {
+                  const isCollapsed = collapsedGroups[group];
+                  const isTargetGroup = group === selectedDocType;
+                  const startIndex = globalItemIndex;
+
+                  return (
+                    <div
+                      key={group}
+                      className={`flex flex-col gap-y-2 ${
+                        isTargetGroup
+                          ? "border-2 border-primary/20 p-4 rounded-2xl bg-primary/5 shadow-sm"
+                          : ""
+                      }`}
+                    >
+                      {/* Group Header (clickable to collapse/expand) */}
+                      <div
+                        onClick={() => toggleGroupCollapse(group)}
+                        className="flex items-center justify-between px-1 text-xs font-bold text-primary uppercase tracking-wider cursor-pointer select-none group"
+                      >
+                        <div className="flex items-center gap-x-2">
+                          <Tags className="w-3 h-3 opacity-70" />
+                          <span
+                            className={
+                              isTargetGroup
+                                ? "text-sm text-primary font-extrabold"
+                                : ""
+                            }
+                          >
+                            {group}{" "}
+                            {isTargetGroup && selectedDocType !== "All" && (
+                              <span className="text-xs font-normal normal-case text-zinc-500">
+                                (Active Filter)
+                              </span>
+                            )}
+                          </span>
+                          <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-[10px] normal-case font-bold">
+                            {items.length}
+                          </span>
+                        </div>
+                        {isCollapsed ? (
+                          <ChevronDown className="w-3.5 h-3.5 text-zinc-400 group-hover:text-primary transition-colors" />
+                        ) : (
+                          <ChevronUp className="w-3.5 h-3.5 text-zinc-400 group-hover:text-primary transition-colors" />
+                        )}
+                      </div>
+
+                      {!isCollapsed && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1.5 shadow-sm w-full">
+                          {items.map((option) => {
+                            const isFocused = globalItemIndex === focusedIndex;
+                            const currentIndex = globalItemIndex;
+                            globalItemIndex++;
+
+                            return (
+                              <div
+                                key={`${group}-${option.title}-${option.name || currentIndex}`}
+                                data-active={isFocused}
+                                className={`flex items-center justify-between gap-x-4 px-4 py-3 rounded-lg cursor-pointer transition-all duration-150 text-left ${
+                                  isFocused
+                                    ? "bg-primary text-primary-foreground"
+                                    : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                                }`}
+                                onClick={() => handleSelectOption(option)}
+                                onMouseEnter={() =>
+                                  setFocusedIndex(currentIndex)
+                                }
+                              >
+                                <div className="flex items-center gap-x-4 min-w-0 grow">
+                                  {option.url ? (
+                                    <FileSearch
+                                      className={`w-4 h-4 shrink-0 transition-colors ${
+                                        isFocused
+                                          ? "text-primary-foreground"
+                                          : "text-zinc-400"
+                                      }`}
+                                    />
+                                  ) : (
+                                    <FolderOpen
+                                      className={`w-4 h-4 shrink-0 transition-colors ${
+                                        isFocused
+                                          ? "text-primary-foreground"
+                                          : "text-zinc-400"
+                                      }`}
+                                    />
+                                  )}
+                                  <div className="flex flex-col min-w-0">
+                                    <span
+                                      className={`text-sm font-semibold truncate ${
+                                        isFocused
+                                          ? "text-primary-foreground"
+                                          : "text-zinc-900 dark:text-zinc-100"
+                                      }`}
+                                    >
+                                      {option.title}
+                                    </span>
+                                    {option.description && (
+                                      <span
+                                        className={`text-xs truncate mt-0.5 max-w-xl ${
+                                          isFocused
+                                            ? "text-primary-foreground/80"
+                                            : "text-zinc-400 dark:text-zinc-500"
+                                        }`}
+                                      >
+                                        {option.description}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                {option.name && (
+                                  <span
+                                    className={`text-[11px] font-mono px-2 py-0.5 rounded shrink-0 transition-colors ${
+                                      isFocused
+                                        ? "bg-primary-foreground/20 text-primary-foreground"
+                                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
+                                    }`}
+                                  >
+                                    {option.name}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : isSearching ? (
+              <div className="flex items-center justify-center h-full text-sm text-zinc-400">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-zinc-300 border-t-primary rounded-full animate-spin" />
+                  Searching...
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full text-sm text-zinc-400">
+                No matches found for "{searchTerm}" under the selected scope.
+              </div>
+            )
+          ) : (
+            <div className="flex flex-col gap-y-6 max-w-none">
+              {Object.entries(filteredOptions).map(([group, items]) => {
+                const isCollapsed = collapsedGroups[group];
+                const startIndex = globalItemIndex;
+
+                return (
+                  <div key={group} className="flex flex-col gap-y-2">
+                    {/* Group Header */}
+                    <div
+                      onClick={() => toggleGroupCollapse(group)}
+                      className="flex items-center justify-between px-1 text-xs font-bold text-primary uppercase tracking-wider cursor-pointer select-none group"
+                    >
+                      <div className="flex items-center gap-x-2">
+                        <Tags className="w-3 h-3 opacity-70" />
+                        <span>{group}</span>
+                        <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-[10px] normal-case font-bold">
+                          {items.length}
+                        </span>
+                      </div>
+                      {isCollapsed ? (
+                        <ChevronDown className="w-3.5 h-3.5 text-zinc-400 group-hover:text-primary transition-colors" />
+                      ) : (
+                        <ChevronUp className="w-3.5 h-3.5 text-zinc-400 group-hover:text-primary transition-colors" />
+                      )}
+                    </div>
+
+                    {!isCollapsed && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1.5 shadow-sm w-full">
+                        {items.map((option) => {
+                          const isFocused = globalItemIndex === focusedIndex;
+                          const currentIndex = globalItemIndex;
+                          globalItemIndex++;
+
+                          return (
+                            <div
+                              key={`${group}-${option.title}-${option.name || currentIndex}`}
+                              data-active={isFocused}
+                              className={`flex items-center justify-between gap-x-4 px-4 py-3 rounded-lg cursor-pointer transition-all duration-150 text-left ${
+                                isFocused
+                                  ? "bg-primary text-primary-foreground"
+                                  : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                              }`}
+                              onClick={() => handleSelectOption(option)}
+                              onMouseEnter={() =>
+                                setFocusedIndex(currentIndex)
+                              }
+                            >
+                              <div className="flex items-center gap-x-4 min-w-0 grow">
+                                <FileSearch className="w-4 h-4 shrink-0 text-zinc-400" />
+                                <div className="flex flex-col min-w-0">
+                                  <span
+                                    className={`text-sm font-semibold truncate ${
+                                      isFocused
+                                        ? "text-primary-foreground"
+                                        : "text-zinc-900 dark:text-zinc-100"
+                                    }`}
+                                  >
+                                    {option.title}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer: Navigation tips, Per Page, Pagination */}
+        <div className="bg-zinc-50 dark:bg-zinc-900 px-5 py-3 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <div className="flex items-center gap-x-2 text-[11px] text-zinc-400">
+              <span>↑↓ to navigate</span>
+              <span>•</span>
+              <span>↵ to select</span>
+              <span>•</span>
+              <span>Esc to close</span>
+            </div>
+
+            {shouldSearch && (
+              <div className="flex items-center gap-x-2 border-l border-zinc-200 dark:border-zinc-700 pl-4">
+                <span className="text-[11px] font-medium text-zinc-500">
+                  Per Page:
+                </span>
+                <select
+                  value={limit}
+                  onChange={(e) => setLimit(Number(e.target.value))}
+                  className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-0.5 text-xs text-zinc-600 dark:text-zinc-400 focus:outline-none focus:border-primary font-medium shadow-sm"
+                >
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={500}>500</option>
+                  <option value={1000}>1000</option>
+                  <option value={2500}>2500</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          {shouldSearch &&
+            ((searchResponse?.message as any[])?.length > 0 || start > 0) && (
+              <div className="flex items-center gap-x-3">
+                <button
+                  disabled={start === 0}
+                  onClick={() =>
+                    setStart((prev) => Math.max(0, prev - limit))
+                  }
+                  className="flex items-center gap-x-1 px-3 py-1 text-xs font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:hover:bg-white dark:disabled:hover:bg-zinc-800 transition-all shadow-sm"
+                >
+                  <ChevronDown className="w-3 h-3 rotate-90" />
+                  <span>Prev</span>
+                </button>
+                <span className="text-xs font-medium text-zinc-500">
+                  Showing results {start + 1} –{" "}
+                  {start + ((searchResponse?.message as any[])?.length || 0)}
+                </span>
+                <button
+                  disabled={
+                    !searchResponse?.message ||
+                    (searchResponse.message as any[]).length < limit
+                  }
+                  onClick={() => setStart((prev) => prev + limit)}
+                  className="flex items-center gap-x-1 px-3 py-1 text-xs font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:hover:bg-white dark:disabled:hover:bg-zinc-800 transition-all shadow-sm"
+                >
+                  <span>Next</span>
+                  <ChevronDown className="w-3 h-3 -rotate-90" />
+                </button>
+              </div>
+            )}
+        </div>
+      </div>
+    </div>
   );
 }
 
 export function SearchTrigger({ onClick }: { onClick: () => void }) {
+  React.useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        onClick();
+      }
+    };
+    document.addEventListener("keydown", down);
+    return () => document.removeEventListener("keydown", down);
+  }, [onClick]);
+
   return (
     <button
       onClick={onClick}
       className="inline-flex items-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-8 px-3 py-1 relative w-full justify-start text-muted-foreground sm:pr-12 md:w-36 lg:w-56"
     >
       <Search className="mr-2 h-3.5 w-3.5" />
-      <span className="hidden lg:inline-flex">Search...</span>
+      <span className="hidden lg:inline-flex">Search ...</span>
       <span className="inline-flex lg:hidden">Search...</span>
       <kbd className="pointer-events-none absolute right-1.5 top-1.5 hidden h-4 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
         <span className="text-xs">⌘</span>K

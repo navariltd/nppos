@@ -12,18 +12,6 @@ export function SiteHeader() {
   const { isLoading } = useUser();
   const [searchOpen, setSearchOpen] = React.useState(false);
 
-  React.useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        setSearchOpen((open) => !open);
-      }
-    };
-
-    document.addEventListener("keydown", down);
-    return () => document.removeEventListener("keydown", down);
-  }, []);
-
   return (
     <>
       <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
@@ -39,7 +27,7 @@ export function SiteHeader() {
             </div>
           ) : (
             <div className="flex-1 max-w-sm">
-              <SearchTrigger onClick={() => setSearchOpen(true)} />
+              <SearchTrigger onClick={() => setSearchOpen((prev) => !prev)} />
             </div>
           )}
           <div className="ml-auto flex items-center gap-2">
