@@ -103,6 +103,7 @@
    "options": "Draft\nActive\nPartially Redeemed\nRedeemed\nExpired\nCancelled"
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "image",
    "fieldtype": "Attach Image",
    "label": "Image"
@@ -459,7 +460,7 @@
    "link_fieldname": "entitlement_voucher"
   }
  ],
- "modified": "2026-07-21 04:54:25.185192",
+ "modified": "2026-07-21 06:12:52.651528",
  "modified_by": "Administrator",
  "module": "NPPOS",
  "name": "Entitlement Voucher",
