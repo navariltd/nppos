@@ -91,7 +91,7 @@ export function NavUser({
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem asChild className="cursor-pointer">
-                <Link to="/settings/account">
+                <Link to={`/app/user/${user.name}`}>
                   <CircleUser />
                   Account
                 </Link>

@@ -31,7 +31,6 @@ const DocTypeListPage = lazy(() => import("@/app/doctype/DocTypeListPage"));
 const DocTypeFormPage = lazy(() => import("@/app/doctype/DocTypeFormPage"));
 
 const UserSettings = lazy(() => import("@/app/settings/user/page"));
-const AccountSettings = lazy(() => import("@/app/settings/account/page"));
 const NotificationSettings = lazy(
   () => import("@/app/settings/notifications/page"),
 );
@@ -113,10 +112,6 @@ export const routes: RouteConfig[] = [
           {
             path: "user",
             element: <UserSettings />,
-          },
-          {
-            path: "account",
-            element: <AccountSettings />,
           },
           {
             path: "notifications",
