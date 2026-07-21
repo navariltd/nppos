@@ -1,10 +1,12 @@
 import { useUser } from "@/contexts/user-context";
-import { callPost } from "@/lib/frappe-service";
-import React, { createContext, useContext, useEffect, useState } from "react";
+import { callGet, callPost } from "@/lib/frappe-service";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 interface POSContextType {
   sessionDefaults: any[] | null;
   posOpeningEntry: any | null;
+  posProfile: any | null;
+  warehouse: string | null;
   isLoadingMetadata: boolean;
   hasCachedData: boolean;
   refreshPOSMetadata: () => Promise<void>;
@@ -12,6 +14,7 @@ interface POSContextType {
 
 const STORAGE_KEY_SESSION = "np-pos:sessionDefaults";
 const STORAGE_KEY_OPENING = "np-pos:posOpeningEntry";
+const STORAGE_KEY_PROFILE = "np-pos:posProfile";
 
 /**
  * Load cached data from sessionStorage so a remount (navigation away and back)
@@ -40,6 +43,8 @@ function saveCache(key: string, value: any) {
 const POSContext = createContext<POSContextType>({
   sessionDefaults: null,
   posOpeningEntry: null,
+  posProfile: null,
+  warehouse: null,
   isLoadingMetadata: true,
   hasCachedData: false,
   refreshPOSMetadata: async () => {},
@@ -57,9 +62,13 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
   const [posOpeningEntry, setPosOpeningEntry] = useState<any | null>(
     () => loadCached<any>(STORAGE_KEY_OPENING) ?? null,
   );
+  const [posProfile, setPosProfile] = useState<any | null>(
+    () => loadCached<any>(STORAGE_KEY_PROFILE) ?? null,
+  );
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(
     () => !loadCached(STORAGE_KEY_OPENING),
   );
+  const [profileName, setProfileName] = useState<string | null>(null);
 
   const hasCachedData =
     loadCached(STORAGE_KEY_OPENING) !== null ||
@@ -71,6 +80,32 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
   const { post: checkOpening } = callPost(
     "erpnext.selling.page.point_of_sale.point_of_sale.check_opening_entry",
   );
+
+  // Reactive hook: fetch POS Profile when profileName changes (from opening entry)
+  const { data: profileData } = callGet(
+    profileName ? "frappe.client.get" : null,
+    profileName
+      ? { doctype: "POS Profile", name: profileName }
+      : {},
+    profileName ? `pos-profile-${profileName}` : undefined as string | undefined,
+  );
+
+  // Sync the fetched profile into state + cache
+  useEffect(() => {
+    if (profileData?.message) {
+      setPosProfile(profileData.message);
+      saveCache(STORAGE_KEY_PROFILE, profileData.message);
+    }
+  }, [profileData]);
+
+  const warehouse = useMemo(() => {
+    // First try from posProfile
+    if (posProfile?.warehouse) return posProfile.warehouse;
+    // Fallback to sessionDefaults
+    const fromDefaults = sessionDefaults?.find((s: any) => s?.key === "warehouse")?.value;
+    if (fromDefaults) return fromDefaults;
+    return null;
+  }, [posProfile, sessionDefaults]);
 
   const loadPOSMetadata = async () => {
     if (!user?.name) {
@@ -90,8 +125,15 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
 
       const openingResponse = await checkOpening({ user: user.name });
       if (openingResponse && (openingResponse as any).message) {
-        setPosOpeningEntry((openingResponse as any).message);
-        saveCache(STORAGE_KEY_OPENING, (openingResponse as any).message);
+        const opening = (openingResponse as any).message;
+        setPosOpeningEntry(opening);
+        saveCache(STORAGE_KEY_OPENING, opening);
+
+        // Extract pos_profile name — the hook will fetch the full doc
+        const name = opening?.[0]?.pos_profile || opening?.pos_profile;
+        if (name) {
+          setProfileName(name);
+        }
       } else {
         setPosOpeningEntry([]);
         saveCache(STORAGE_KEY_OPENING, []);
@@ -106,11 +148,9 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
   // Silently refresh in background on mount, no full loading state display
   useEffect(() => {
     if (user?.name) {
-      // If we have cached data, do a silent background refresh
       if (hasCachedData) {
         loadPOSMetadata();
       } else {
-        // First load - show loading
         loadPOSMetadata();
       }
     } else {
@@ -123,6 +163,8 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
       value={{
         sessionDefaults,
         posOpeningEntry,
+        posProfile,
+        warehouse,
         isLoadingMetadata,
         hasCachedData,
         refreshPOSMetadata: loadPOSMetadata,
