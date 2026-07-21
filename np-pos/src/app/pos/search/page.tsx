@@ -5,17 +5,31 @@
 
 "use client";
 
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { usePOS } from "@/contexts/pos-context";
 import { useFrappeGetCall } from "frappe-react-sdk";
-import { Search, Loader2, FileText, Clock, ArrowRight, Banknote, Package, ExternalLink, ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  ArrowRight,
+  Banknote,
+  Clock,
+  ExternalLink,
+  FileText,
+  Loader2,
+  Package,
+  Search,
+  Warehouse,
+} from "lucide-react";
+import { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
+import {
+  isPermissionError,
+  parseFrappeError,
+} from "@/components/doctype/form/parse-error";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -23,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -31,18 +46,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { isPermissionError, parseFrappeError } from "@/components/doctype/form/parse-error";
 
 type SearchMode = "voucher" | "beneficiary";
 
 /** Format currency. */
 function fmt(val: number | null | undefined): string {
   if (val == null) return "—";
-  return new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", minimumFractionDigits: 0 }).format(val);
+  return new Intl.NumberFormat("en-KE", {
+    style: "currency",
+    currency: "KES",
+    minimumFractionDigits: 0,
+  }).format(val);
 }
 
 /** Badge variant for docstatus. */
-function dsVariant(ds: number): "default" | "secondary" | "outline" | "destructive" {
+function dsVariant(
+  ds: number,
+): "default" | "secondary" | "outline" | "destructive" {
   if (ds === 1) return "default";
   if (ds === 0) return "secondary";
   return "outline";
@@ -60,13 +80,16 @@ export default function SearchVoucher() {
   const [searchParams, setSearchParams] = useSearchParams();
   const voucherParam = searchParams.get("voucher");
   const beneParam = searchParams.get("bene");
+  const { warehouse: defaultWarehouse } = usePOS();
 
   const initialMode: SearchMode = beneParam ? "beneficiary" : "voucher";
   const initialQuery = voucherParam || beneParam || "";
 
   const [searchMode, setSearchMode] = useState<SearchMode>(initialMode);
   const [searchQuery, setSearchQuery] = useState(initialQuery);
-  const [searchedQuery, setSearchedQuery] = useState<string | null>(initialQuery || null);
+  const [searchedQuery, setSearchedQuery] = useState<string | null>(
+    initialQuery || null,
+  );
   const [selectedVoucher, setSelectedVoucher] = useState<any>(null);
 
   const mode = searchMode;
@@ -74,49 +97,80 @@ export default function SearchVoucher() {
 
   // Fetch vouchers: exact 1 for voucher search, ALL for beneficiary search
   const limit = mode === "voucher" ? 1 : 999;
-  const { data: listData, error: listError, isLoading: listLoading } = useFrappeGetCall(
-    q ? "frappe.client.get_list" : null,
+  // Build filters: docstatus=1, search term, and warehouse filter
+  const filters: any[] = [["Entitlement Voucher", "docstatus", "=", 1]];
+  if (defaultWarehouse) {
+    filters.push(["Entitlement Voucher", "warehouse", "=", defaultWarehouse]);
+  }
+  if (mode === "voucher") {
+    filters.push(["Entitlement Voucher", "voucher_number", "=", q]);
+  } else if (q) {
+    filters.push(["Entitlement Voucher", "party", "like", `%${q}%`]);
+  }
+
+  const swrKey = q ? `sv-${mode}-${q}-${defaultWarehouse || ""}` : null;
+  const {
+    data: listData,
+    error: listError,
+    isLoading: listLoading,
+  } = useFrappeGetCall(
+    q ? "frappe.client.get_list" : (null as any),
     (q
       ? ({
           doctype: "Entitlement Voucher",
           fields: JSON.stringify(["*"]),
-          filters: JSON.stringify([
-            ["Entitlement Voucher", "docstatus", "=", 1],
-            mode === "voucher"
-              ? ["Entitlement Voucher", "voucher_number", "=", q]
-              : ["Entitlement Voucher", "party", "like", `%${q}%`],
-          ]),
+          filters: JSON.stringify(filters),
           limit_page_length: limit,
           order_by: "creation desc",
         } as any)
       : {}) as any,
-    (q ? `sv-${mode}-${q}` : null) as any,
+    swrKey as any,
   ) as any;
 
   const allVouchers = (listData as any)?.message || [];
   // For beneficiary mode with multiple results, show list until one is selected
-  const showAsList = mode === "beneficiary" && allVouchers.length > 1 && !selectedVoucher;
+  const showAsList =
+    mode === "beneficiary" && allVouchers.length > 1 && !selectedVoucher;
 
   // Determine which voucher to show details for
-  const activeVoucher = selectedVoucher || (!showAsList ? allVouchers[0] : null);
+  const activeVoucher =
+    selectedVoucher || (!showAsList ? allVouchers[0] : null);
   const voucherName = activeVoucher?.name;
 
   // Fetch linked submitted redemptions for the active voucher
+  const redFilters: any[] = [
+    ["Entitlement Redemption", "entitlement_voucher", "=", voucherName],
+    ["Entitlement Redemption", "docstatus", "=", 1],
+  ];
+
+  if (defaultWarehouse) {
+    redFilters.push([
+      "Entitlement Redemption",
+      "warehouse",
+      "=",
+      defaultWarehouse,
+    ]);
+  }
   const { data: redRaw } = useFrappeGetCall(
-    voucherName ? "frappe.client.get_list" : null,
+    voucherName ? "frappe.client.get_list" : (null as any),
     voucherName
       ? ({
           doctype: "Entitlement Redemption",
-          fields: JSON.stringify(["name", "amount", "qty", "creation", "entitlement_type", "posting_date", "owner"]),
-          filters: JSON.stringify([
-            ["Entitlement Redemption", "entitlement_voucher", "=", voucherName!],
-            ["Entitlement Redemption", "docstatus", "=", 1],
+          fields: JSON.stringify([
+            "name",
+            "amount",
+            "qty",
+            "creation",
+            "entitlement_type",
+            "posting_date",
+            "owner",
           ]),
+          filters: JSON.stringify(redFilters),
           limit_page_length: 999,
           order_by: "creation desc",
         } as any)
       : {},
-    voucherName ? `sv-red-${voucherName}` : null,
+    voucherName ? `sv-red-${voucherName}-${defaultWarehouse || ""}` : null,
   ) as any;
 
   const redemptions = (redRaw as any)?.message || [];
@@ -124,11 +178,18 @@ export default function SearchVoucher() {
   const isSubmitted = activeVoucher?.docstatus === 1;
   const totalAmount = activeVoucher?.amount || 0;
   const totalQty = activeVoucher?.qty || 0;
-  const redeemedAmount = redemptions.reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
-  const redeemedQty = redemptions.reduce((s: number, r: any) => s + (Number(r.qty) || 0), 0);
+  const redeemedAmount = redemptions.reduce(
+    (s: number, r: any) => s + (Number(r.amount) || 0),
+    0,
+  );
+  const redeemedQty = redemptions.reduce(
+    (s: number, r: any) => s + (Number(r.qty) || 0),
+    0,
+  );
   const remainingAmount = Math.max(0, totalAmount - redeemedAmount);
   const remainingQty = Math.max(0, totalQty - redeemedQty);
-  const canRedeem = isSubmitted && (isCash ? remainingAmount > 0 : remainingQty > 0);
+  const canRedeem =
+    isSubmitted && (isCash ? remainingAmount > 0 : remainingQty > 0);
 
   const handleSearch = () => {
     if (!searchQuery.trim()) return;
@@ -151,8 +212,20 @@ export default function SearchVoucher() {
   return (
     <div className="px-4 lg:px-6 space-y-6 pb-8">
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold tracking-tight">Search Voucher / Entitlements</h1>
-        <p className="text-muted-foreground">Find a submitted voucher by number or beneficiary</p>
+        <h1 className="text-2xl font-bold tracking-tight">
+          Search Voucher / Entitlements
+        </h1>
+        <p className="text-muted-foreground">
+          Find a submitted voucher by number or beneficiary
+        </p>
+        {defaultWarehouse && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Warehouse className="h-3 w-3" /> Filtering by warehouse:{" "}
+            <span className="font-medium text-foreground">
+              {defaultWarehouse}
+            </span>
+          </p>
+        )}
       </div>
 
       {/* Search Bar */}
@@ -160,41 +233,75 @@ export default function SearchVoucher() {
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="w-full sm:w-48">
-              <Label htmlFor="search-mode" className="sr-only">Search by</Label>
-              <Select value={searchMode} onValueChange={(v) => setSearchMode(v as SearchMode)}>
+              <Label htmlFor="search-mode" className="sr-only">
+                Search by
+              </Label>
+              <Select
+                value={searchMode}
+                onValueChange={(v) => setSearchMode(v as SearchMode)}
+              >
                 <SelectTrigger id="search-mode">
                   <SelectValue placeholder="Search by" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="voucher">Voucher Number</SelectItem>
-                  <SelectItem value="beneficiary">Beneficiary Number</SelectItem>
+                  <SelectItem value="beneficiary">
+                    Beneficiary Number
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="flex-1 flex gap-2">
               <Input
-                placeholder={searchMode === "voucher" ? "Enter voucher number..." : "Enter beneficiary ID..."}
+                placeholder={
+                  searchMode === "voucher"
+                    ? "Enter voucher number..."
+                    : "Enter beneficiary ID..."
+                }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
               />
-              <Button onClick={handleSearch} disabled={!searchQuery.trim() || listLoading}>
-                {listLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Search
+              <Button
+                onClick={handleSearch}
+                disabled={!searchQuery.trim() || listLoading}
+              >
+                {listLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}{" "}
+                Search
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {listError && <Card className="border-destructive/50"><CardContent className="pt-6 text-destructive text-sm">{isPermissionError(listError) ? "Access denied." : parseFrappeError(listError)}</CardContent></Card>}
+      {listError && (
+        <Card className="border-destructive/50">
+          <CardContent className="pt-6 text-destructive text-sm">
+            {isPermissionError(listError)
+              ? "Access denied."
+              : parseFrappeError(listError)}
+          </CardContent>
+        </Card>
+      )}
 
-      {listLoading && <div className="space-y-4"><Skeleton className="h-32 w-full rounded-lg" /><Skeleton className="h-48 w-full rounded-lg" /></div>}
+      {listLoading && (
+        <div className="space-y-4">
+          <Skeleton className="h-32 w-full rounded-lg" />
+          <Skeleton className="h-48 w-full rounded-lg" />
+        </div>
+      )}
 
       {/* Beneficiary: Show voucher list */}
       {!listLoading && showAsList && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Active Vouchers for {searchedQuery} ({allVouchers.length})</CardTitle>
+            <CardTitle className="text-lg">
+              Active Vouchers for {searchedQuery} ({allVouchers.length})
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -216,19 +323,38 @@ export default function SearchVoucher() {
                     className="cursor-pointer hover:bg-muted/30"
                     onClick={() => setSelectedVoucher(v)}
                   >
-                    <TableCell className="px-4 font-medium text-xs">{v.voucher_number || v.name}</TableCell>
+                    <TableCell className="px-4 font-medium text-xs">
+                      {v.voucher_number || v.name}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1.5">
-                        {v.entitlement_type === "Cash" ? <Banknote className="h-3 w-3 text-green-500" /> : <Package className="h-3 w-3 text-blue-500" />}
+                        {v.entitlement_type === "Cash" ? (
+                          <Banknote className="h-3 w-3 text-green-500" />
+                        ) : (
+                          <Package className="h-3 w-3 text-blue-500" />
+                        )}
                         <span className="text-xs">{v.entitlement_type}</span>
                       </div>
                     </TableCell>
-                    <TableCell><Badge variant={dsVariant(v.docstatus)} className="text-[10px]">{dsLabel(v.docstatus)}</Badge></TableCell>
-                    <TableCell className="text-right text-xs font-medium">
-                      {v.entitlement_type === "Cash" ? fmt(v.amount) : `${v.qty || 0}`}
+                    <TableCell>
+                      <Badge
+                        variant={dsVariant(v.docstatus)}
+                        className="text-[10px]"
+                      >
+                        {dsLabel(v.docstatus)}
+                      </Badge>
                     </TableCell>
-                    <TableCell className="text-xs">{v.valid_to || "—"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">—</TableCell>
+                    <TableCell className="text-right text-xs font-medium">
+                      {v.entitlement_type === "Cash"
+                        ? fmt(v.amount)
+                        : `${v.qty || 0}`}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {v.valid_to || "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      —
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Button
@@ -255,7 +381,9 @@ export default function SearchVoucher() {
                           className="h-7 text-xs gap-1 px-2"
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/pos/issue-entitlement?voucher=${v.name}`);
+                            navigate(
+                              `/pos/issue-entitlement?voucher=${v.name}`,
+                            );
                           }}
                         >
                           {v.entitlement_type === "Cash" ? "Issue" : "Issue"}
@@ -284,16 +412,26 @@ export default function SearchVoucher() {
             <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Voucher</p>
-                <p className="font-semibold">{activeVoucher.voucher_number || activeVoucher.name}</p>
+                <p className="font-semibold">
+                  {activeVoucher.voucher_number || activeVoucher.name}
+                </p>
               </div>
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">DocStatus</p>
-                <Badge variant={dsVariant(activeVoucher.docstatus)}>{dsLabel(activeVoucher.docstatus)}</Badge>
+                <Badge variant={dsVariant(activeVoucher.docstatus)}>
+                  {dsLabel(activeVoucher.docstatus)}
+                </Badge>
               </div>
               <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Entitlement Type</p>
+                <p className="text-xs text-muted-foreground">
+                  Entitlement Type
+                </p>
                 <div className="flex items-center gap-1.5">
-                  {isCash ? <Banknote className="h-4 w-4 text-green-500" /> : <Package className="h-4 w-4 text-blue-500" />}
+                  {isCash ? (
+                    <Banknote className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <Package className="h-4 w-4 text-blue-500" />
+                  )}
                   <span>{activeVoucher.entitlement_type}</span>
                 </div>
               </div>
@@ -320,7 +458,9 @@ export default function SearchVoucher() {
               {isCash ? (
                 <>
                   <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Total Amount</p>
+                    <p className="text-xs text-muted-foreground">
+                      Total Amount
+                    </p>
                     <p className="font-semibold">{fmt(totalAmount)}</p>
                   </div>
                   <div className="space-y-1">
@@ -329,7 +469,9 @@ export default function SearchVoucher() {
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">Remaining</p>
-                    <p className="font-bold text-lg text-green-600">{fmt(remainingAmount)}</p>
+                    <p className="font-bold text-lg text-green-600">
+                      {fmt(remainingAmount)}
+                    </p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">Rate</p>
@@ -352,7 +494,9 @@ export default function SearchVoucher() {
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">Remaining</p>
-                    <p className="font-bold text-lg text-blue-600">{remainingQty}</p>
+                    <p className="font-bold text-lg text-blue-600">
+                      {remainingQty}
+                    </p>
                   </div>
                 </>
               )}
@@ -371,15 +515,26 @@ export default function SearchVoucher() {
                       : `${remainingQty} ${activeVoucher.uom || "units"} remaining to issue`}
                   </p>
                 </div>
-                <Button onClick={() => navigate(`/pos/issue-entitlement?voucher=${activeVoucher.name}`)} size="lg" className="gap-2">
-                  {isCash ? "Issue Cash" : "Issue Goods"} <ArrowRight className="h-4 w-4" />
+                <Button
+                  onClick={() =>
+                    navigate(
+                      `/pos/issue-entitlement?voucher=${activeVoucher.name}`,
+                    )
+                  }
+                  size="lg"
+                  className="gap-2"
+                >
+                  {isCash ? "Issue Cash" : "Issue Goods"}{" "}
+                  <ArrowRight className="h-4 w-4" />
                 </Button>
               </CardContent>
             </Card>
           ) : (
             <Card className="border-muted">
               <CardContent className="pt-6">
-                <p className="font-medium">Status: {dsLabel(activeVoucher.docstatus)}</p>
+                <p className="font-medium">
+                  Status: {dsLabel(activeVoucher.docstatus)}
+                </p>
                 <p className="text-sm text-muted-foreground">
                   {activeVoucher.docstatus !== 1
                     ? "Only submitted vouchers can be redeemed."
@@ -393,12 +548,15 @@ export default function SearchVoucher() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Clock className="h-5 w-5 text-muted-foreground" /> Redemption History ({redemptions.length})
+                <Clock className="h-5 w-5 text-muted-foreground" /> Redemption
+                History ({redemptions.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {redemptions.length === 0 ? (
-                <div className="px-6 pb-6 text-sm text-muted-foreground">No redemptions yet.</div>
+                <div className="px-6 pb-6 text-sm text-muted-foreground">
+                  No redemptions yet.
+                </div>
               ) : (
                 <Table>
                   <TableHeader>
@@ -414,16 +572,35 @@ export default function SearchVoucher() {
                   <TableBody>
                     {redemptions.map((r: any) => (
                       <TableRow key={r.name}>
-                        <TableCell className="px-4 font-medium text-xs">{r.name}</TableCell>
-                        <TableCell className="text-xs">{r.posting_date || r.creation?.slice(0, 10)}</TableCell>
-                        <TableCell><Badge variant="outline" className="text-xs">{r.entitlement_type || "—"}</Badge></TableCell>
-                        <TableCell className="text-right font-medium text-xs">
-                          {r.entitlement_type === "Cash" ? fmt(r.amount) : `${r.qty || 0} pcs`}
+                        <TableCell className="px-4 font-medium text-xs">
+                          {r.name}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{r.owner?.split("@")[0] || "—"}</TableCell>
+                        <TableCell className="text-xs">
+                          {r.posting_date || r.creation?.slice(0, 10)}
+                        </TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="icon" className="h-6 w-6"
-                            onClick={() => navigate(`/app/entitlement-redemption/${r.name}`)} title="Open">
+                          <Badge variant="outline" className="text-xs">
+                            {r.entitlement_type || "—"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-xs">
+                          {r.entitlement_type === "Cash"
+                            ? fmt(r.amount)
+                            : `${r.qty || 0} pcs`}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {r.owner?.split("@")[0] || "—"}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() =>
+                              navigate(`/app/entitlement-redemption/${r.name}`)
+                            }
+                            title="Open"
+                          >
                             <ExternalLink className="h-3 w-3" />
                           </Button>
                         </TableCell>
@@ -438,13 +615,18 @@ export default function SearchVoucher() {
       )}
 
       {/* No Results */}
-      {!listLoading && searchedQuery && allVouchers.length === 0 && !listError && (
-        <Card>
-          <CardContent className="pt-6 text-center py-12">
-            <p className="text-muted-foreground">No submitted voucher found matching your search.</p>
-          </CardContent>
-        </Card>
-      )}
+      {!listLoading &&
+        searchedQuery &&
+        allVouchers.length === 0 &&
+        !listError && (
+          <Card>
+            <CardContent className="pt-6 text-center py-12">
+              <p className="text-muted-foreground">
+                No submitted voucher found matching your search.
+              </p>
+            </CardContent>
+          </Card>
+        )}
     </div>
   );
 }
