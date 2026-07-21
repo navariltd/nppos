@@ -5,22 +5,11 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
 
-import {
-  Banknote,
-  CheckSquare,
-  Code2,
-  CreditCard,
-  History,
-  LayoutDashboard,
-  LogIn,
-  Package,
-  User,
-} from "lucide-react";
+import { CheckSquare, History, LayoutDashboard, LogIn } from "lucide-react";
 
+import { Logo } from "@/components/logo";
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Logo } from "@/components/logo";
 import {
   Sidebar,
   SidebarContent,
@@ -30,37 +19,17 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useUser } from "@/contexts/user-context";
 
 const privateNavGroups = [
   {
-    label: "Core Operations",
     items: [
       {
-        title: "POS Dashboard",
+        title: "Search Voucher",
         url: "/pos",
         icon: LayoutDashboard,
       },
-      {
-        title: "Goods / Hampers",
-        url: "/pos/goods-hampers",
-        icon: Package,
-      },
-      {
-        title: "Cash Vouchers",
-        url: "/pos/cash-vouchers",
-        icon: Banknote,
-      },
-      {
-        title: "ATM Bank Card",
-        url: "/pos/atm-card",
-        icon: CreditCard,
-      },
-    ],
-  },
-  {
-    label: "Management & Records",
-    items: [
       {
         title: "Transaction History",
         url: "/pos/transactions",
@@ -70,21 +39,6 @@ const privateNavGroups = [
         title: "Closing Entry",
         url: "/pos/closing-entry",
         icon: CheckSquare,
-      },
-      {
-        title: "Users",
-        url: "/users",
-        icon: User,
-      },
-    ],
-  },
-  {
-    label: "Development",
-    items: [
-      {
-        title: "Field Playground",
-        url: "/pos/playground",
-        icon: Code2,
       },
     ],
   },
