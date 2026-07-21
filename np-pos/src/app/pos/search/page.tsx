@@ -18,6 +18,7 @@ import {
   Search,
   Warehouse,
 } from "lucide-react";
+import * as React from "react";
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -191,6 +192,62 @@ export default function SearchVoucher() {
   const canRedeem =
     isSubmitted && (isCash ? remainingAmount > 0 : remainingQty > 0);
 
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  // Global keydown listener: capture scanner input even when input is not focused
+  React.useEffect(() => {
+    let scanBuffer = "";
+    let scanTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // If the input is already focused, let the normal handler deal with it
+      if (document.activeElement === inputRef.current) return;
+
+      // Ignore modifier keys, navigation keys, etc.
+      if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") return;
+      if (e.key === "Tab" || e.key === "Escape") return;
+      if (e.key.length !== 1 && e.key !== "Enter") return;
+
+      // Capture scanner input: accumulate characters, on Enter trigger search
+      if (e.key === "Enter") {
+        const scanned = scanBuffer.trim();
+        if (scanned) {
+          e.preventDefault();
+          // Auto-focus the input and set the scanned value
+          inputRef.current?.focus();
+          setSearchQuery(scanned);
+          setSelectedVoucher(null);
+          // Trigger the search immediately
+          setTimeout(() => {
+            setSearchedQuery(scanned);
+            const params = new URLSearchParams();
+            if (searchMode === "voucher") {
+              params.set("voucher", scanned);
+            } else {
+              params.set("bene", scanned);
+            }
+            setSearchParams(params, { replace: true });
+          }, 0);
+        }
+        scanBuffer = "";
+        return;
+      }
+
+      // Accumulate characters with a debounce (reset buffer if user pauses typing)
+      scanBuffer += e.key;
+      if (scanTimeout) clearTimeout(scanTimeout);
+      scanTimeout = setTimeout(() => {
+        scanBuffer = "";
+      }, 200);
+    };
+
+    document.addEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleGlobalKeyDown);
+      if (scanTimeout) clearTimeout(scanTimeout);
+    };
+  }, [searchMode, setSearchParams]);
+
   const handleSearch = () => {
     if (!searchQuery.trim()) return;
     setSearchedQuery(searchQuery.trim());
@@ -253,10 +310,11 @@ export default function SearchVoucher() {
             </div>
             <div className="flex-1 flex gap-2">
               <Input
+                ref={inputRef}
                 placeholder={
                   searchMode === "voucher"
-                    ? "Enter voucher number..."
-                    : "Enter beneficiary ID..."
+                    ? "Enter voucher number... (scan anywhere)"
+                    : "Enter beneficiary ID... (scan anywhere)"
                 }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
