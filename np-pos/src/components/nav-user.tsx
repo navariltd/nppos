@@ -1,6 +1,6 @@
 "use client";
 
-import { BellDot, CircleUser, EllipsisVertical, LogOut } from "lucide-react";
+import { BellDot, CircleUser, EllipsisVertical, LogOut, Palette } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { Logo } from "@/components/logo";
@@ -24,12 +24,14 @@ import { useState } from "react";
 
 export function NavUser({
   user,
+  onOpenCustomizer,
 }: {
   user: {
     name: string;
     email: string;
     avatar: string;
   };
+  onOpenCustomizer?: () => void;
 }) {
   const { isMobile } = useSidebar();
   const { logout } = useFrappeAuth();
@@ -102,6 +104,19 @@ export function NavUser({
                   Notifications
                 </Link>
               </DropdownMenuItem>
+              {onOpenCustomizer && (
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    // Small delay so the dropdown menu closes before the Sheet opens
+                    setTimeout(onOpenCustomizer, 50);
+                  }}
+                >
+                  <Palette />
+                  Customizer
+                </DropdownMenuItem>
+              )}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem

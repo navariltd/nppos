@@ -85,7 +85,7 @@ function SidebarSkeleton() {
   );
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({ onOpenCustomizer, ...props }: React.ComponentProps<typeof Sidebar> & { onOpenCustomizer?: () => void }) {
   const { user, isLoading, error } = useUser();
 
   if (isLoading) {
@@ -136,7 +136,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         {isAuthenticated ? (
-          <NavUser user={user} />
+          <NavUser user={user} onOpenCustomizer={onOpenCustomizer} />
         ) : (
           <div className="p-2">
             <Link
