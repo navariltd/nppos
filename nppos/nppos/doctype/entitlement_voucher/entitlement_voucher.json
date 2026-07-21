@@ -10,6 +10,7 @@
   "voucher_number",
   "entitlement_type",
   "status",
+  "image",
   "column_break_riym",
   "company",
   "party_type",
@@ -69,20 +70,6 @@
  ],
  "fields": [
   {
-   "fieldname": "section_break_vr6m",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "amended_from",
-   "fieldtype": "Link",
-   "label": "Amended From",
-   "no_copy": 1,
-   "options": "Entitlement Voucher",
-   "print_hide": 1,
-   "read_only": 1,
-   "search_index": 1
-  },
-  {
    "fieldname": "voucher_number",
    "fieldtype": "Data",
    "in_filter": 1,
@@ -92,6 +79,17 @@
    "label": "Voucher Number",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "fieldname": "entitlement_type",
+   "fieldtype": "Select",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "in_preview": 1,
+   "in_standard_filter": 1,
+   "label": "Entitlement Type",
+   "options": "Goods\nCash",
+   "reqd": 1
   },
   {
    "allow_on_submit": 1,
@@ -105,15 +103,9 @@
    "options": "Draft\nActive\nPartially Redeemed\nRedeemed\nExpired\nCancelled"
   },
   {
-   "fieldname": "entitlement_type",
-   "fieldtype": "Select",
-   "in_filter": 1,
-   "in_list_view": 1,
-   "in_preview": 1,
-   "in_standard_filter": 1,
-   "label": "Entitlement Type",
-   "options": "Goods\nCash",
-   "reqd": 1
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "label": "Image"
   },
   {
    "fieldname": "column_break_riym",
@@ -195,6 +187,24 @@
   },
   {
    "depends_on": "eval: doc.entitlement_type == \"Goods\"",
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "label": "UOM",
+   "mandatory_depends_on": "eval: doc.entitlement_type == \"Goods\"",
+   "options": "UOM"
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "label": "Rate",
+   "mandatory_depends_on": "eval: doc.entitlement_type == \"Cash\""
+  },
+  {
+   "fieldname": "column_break_emhf",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval: doc.entitlement_type == \"Goods\"",
    "fieldname": "qty",
    "fieldtype": "Float",
    "label": "Quantity",
@@ -205,18 +215,6 @@
    "fieldtype": "Currency",
    "label": "Amount",
    "mandatory_depends_on": "eval: doc.entitlement_type == \"Cash\""
-  },
-  {
-   "fieldname": "column_break_emhf",
-   "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "eval: doc.entitlement_type == \"Goods\"",
-   "fieldname": "uom",
-   "fieldtype": "Link",
-   "label": "UOM",
-   "mandatory_depends_on": "eval: doc.entitlement_type == \"Goods\"",
-   "options": "UOM"
   },
   {
    "fieldname": "section_break_mpmv",
@@ -287,12 +285,6 @@
    "label": "Company",
    "options": "Company",
    "reqd": 1
-  },
-  {
-   "fieldname": "rate",
-   "fieldtype": "Currency",
-   "label": "Rate",
-   "mandatory_depends_on": "eval: doc.entitlement_type == \"Cash\""
   },
   {
    "fieldname": "more_info_tab",
@@ -430,9 +422,24 @@
    "fieldtype": "Table",
    "label": "Sales Team",
    "options": "Sales Team"
+  },
+  {
+   "fieldname": "section_break_vr6m",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Entitlement Voucher",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
   }
  ],
  "grid_page_length": 50,
+ "image_field": "image",
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [
@@ -452,7 +459,7 @@
    "link_fieldname": "entitlement_voucher"
   }
  ],
- "modified": "2026-07-17 21:00:00.000000",
+ "modified": "2026-07-21 04:54:25.185192",
  "modified_by": "Administrator",
  "module": "NPPOS",
  "name": "Entitlement Voucher",
