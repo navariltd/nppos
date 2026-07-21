@@ -59,7 +59,7 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
     doctype ? `dtf-meta-${doctype}` : null,
   );
 
-  const { data: docData, error: docError } = useFrappeGetCall(
+  const { data: docData, error: docError, mutate: reloadDoc } = useFrappeGetCall(
     "frappe.desk.form.load.getdoc", { doctype, name: docId },
     doctype && docId && !isNew ? `dtf-doc-${doctype}-${docId}` : null,
   );
@@ -267,6 +267,7 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
         collapsedSections={collapsedSections}
         onToggleSection={toggleSection}
         reloadData={handleSave as any}
+        reloadDoc={reloadDoc}
       />
 
       <ConfirmSubmitDialog

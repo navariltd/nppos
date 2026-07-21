@@ -4,17 +4,19 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useFrappePostCall } from "frappe-react-sdk";
+import { useFrappeAuth, useFrappePostCall } from "frappe-react-sdk";
 import { Heart, History, MessageSquare, SendHorizonal } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { timeAgo } from "../utils";
 
 interface DocumentActivityProps {
   form: Record<string, any>;
   docData?: any;
+  onReload?: () => void;
 }
 
-export function DocumentActivity({ form, docData }: DocumentActivityProps) {
+export function DocumentActivity({ form, docData, onReload }: DocumentActivityProps) {
+  const { currentUser } = useFrappeAuth();
   const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
   const [showAllActivity, setShowAllActivity] = useState(true);
   const [commentText, setCommentText] = useState("");
@@ -103,13 +105,20 @@ export function DocumentActivity({ form, docData }: DocumentActivityProps) {
       return;
     setIsSubmittingComment(true);
     try {
+      const userName = currentUser || "";
+      const userEmail = userInfo?.[userName]?.email || "";
       await addCommentCall({
         reference_doctype: currentDoctype,
         reference_name: currentName,
         content: commentText.trim(),
-        comment_email: "",
+        comment_email: userEmail,
+        comment_by: userName,
       });
       setCommentText("");
+      // Refetch doc data to reload the activity timeline
+      if (onReload) {
+        onReload();
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -165,7 +174,7 @@ export function DocumentActivity({ form, docData }: DocumentActivityProps) {
           </div>
           <div>
             <h4 className="text-sm font-bold text-foreground tracking-tight">
-              Activity Stream
+              Activity
             </h4>
             <p className="text-[11px] text-muted-foreground font-medium">
               {totalCommentsCount}{" "}

@@ -30,6 +30,7 @@ interface TabbedFormProps {
   onToggleSection: (fieldname: string) => void;
   metaConfig?: any;
   reloadData?: () => void;
+  reloadDoc?: () => void;
 }
 
 export function TabbedForm({
@@ -45,6 +46,7 @@ export function TabbedForm({
   onToggleSection,
   metaConfig,
   reloadData,
+  reloadDoc,
 }: TabbedFormProps) {
   const [tabs, setTabs] = useState<TabConfig[]>([]);
   const [selectedTab, setSelectedTab] = useState<TabConfig | null>(null);
@@ -215,7 +217,7 @@ export function TabbedForm({
                 )}
               </div>
 
-              {!isNew && <DocumentActivity form={form} docData={docData} />}
+              {!isNew && <DocumentActivity form={form} docData={docData} onReload={reloadDoc} />}
             </div>
           </div>
         </div>
