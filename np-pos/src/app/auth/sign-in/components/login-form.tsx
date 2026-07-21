@@ -70,8 +70,6 @@ export function LoginForm({
         password: password,
       });
 
-      console.log("Login result:", result);
-
       if (!result.full_name) {
         setAuthError(result.error || "Invalid login credentials");
         setLoading(false);
@@ -85,23 +83,6 @@ export function LoginForm({
       setLoading(false);
     }
   };
-
-  if (isUserLoading) {
-    return (
-      <div className={cn("flex flex-col gap-6", className)} {...props}>
-        <Card className="overflow-hidden p-0">
-          <CardContent className="grid p-0 md:grid-cols-2">
-            <div className="p-6 md:p-8 flex items-center justify-center min-h-[400px]">
-              <div className="flex flex-col items-center gap-4">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-                <p className="text-muted-foreground">Loading...</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   if (user) {
     return null;
@@ -180,7 +161,7 @@ export function LoginForm({
                 {loading ? "Logging in..." : "Login"}
               </Button>
               <div className="text-center text-sm">
-                Don&apos;t have an account?{" "}
+                Don't have an account?{" "}
                 <Link
                   to="/auth/sign-up"
                   className="underline underline-offset-4"

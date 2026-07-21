@@ -228,6 +228,8 @@
    "label": "Assignment"
   },
   {
+   "fetch_from": "entitlement_voucher.agent",
+   "fetch_if_empty": 1,
    "fieldname": "agent",
    "fieldtype": "Link",
    "label": "Agent",
@@ -238,6 +240,8 @@
    "fieldtype": "Column Break"
   },
   {
+   "fetch_from": "entitlement_voucher.merchant",
+   "fetch_if_empty": 1,
    "fieldname": "merchant",
    "fieldtype": "Link",
    "label": "Merchant",
@@ -248,11 +252,26 @@
    "fieldtype": "Column Break"
   },
   {
+   "fetch_from": "entitlement_voucher.warehouse",
+   "fetch_if_empty": 1,
    "fieldname": "warehouse",
    "fieldtype": "Link",
    "label": "Warehouse",
    "mandatory_depends_on": "eval: doc.entitlement_type == \"Goods\"",
    "options": "Warehouse"
+  },
+  {
+   "fetch_from": "entitlement_voucher.company",
+   "fetch_if_empty": 1,
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "in_preview": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
   },
   {
    "fieldname": "pos_profile",
@@ -266,6 +285,11 @@
    "options": "POS Profile"
   },
   {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "Posting Date"
+  },
+  {
    "fieldname": "more_info_tab",
    "fieldtype": "Tab Break",
    "label": "More Info"
@@ -277,18 +301,24 @@
    "label": "Printing Settings"
   },
   {
+   "fetch_from": "entitlement_voucher.letter_head",
+   "fetch_if_empty": 1,
    "fieldname": "letter_head",
    "fieldtype": "Link",
    "label": "Letter Head",
    "options": "Letter Head"
   },
   {
+   "fetch_from": "entitlement_voucher.group_same_items",
+   "fetch_if_empty": 1,
    "default": "0",
    "fieldname": "group_same_items",
    "fieldtype": "Check",
    "label": "Group same items"
   },
   {
+   "fetch_from": "entitlement_voucher.language",
+   "fetch_if_empty": 1,
    "fieldname": "language",
    "fieldtype": "Data",
    "label": "Print Language"
@@ -298,6 +328,8 @@
    "fieldtype": "Column Break"
   },
   {
+   "fetch_from": "entitlement_voucher.select_print_heading",
+   "fetch_if_empty": 1,
    "fieldname": "select_print_heading",
    "fieldtype": "Link",
    "label": "Print Heading",
@@ -311,11 +343,87 @@
   },
   {
    "collapsible": 1,
+   "fieldname": "section_break_wsis",
+   "fieldtype": "Section Break",
+   "label": "Accounting Details"
+  },
+  {
+   "fetch_from": "entitlement_voucher.paid_from",
+   "fetch_if_empty": 1,
+   "fieldname": "paid_from",
+   "fieldtype": "Link",
+   "label": "Account Paid From",
+   "mandatory_depends_on": "eval: doc.entitlement_type == \"Cash\"",
+   "options": "Account"
+  },
+  {
+   "fetch_from": "entitlement_voucher.paid_from_account_currency",
+   "fetch_if_empty": 1,
+   "fieldname": "paid_from_account_currency",
+   "fieldtype": "Link",
+   "label": "Account Currency (From)",
+   "options": "Currency"
+  },
+  {
+   "fetch_from": "entitlement_voucher.paid_to",
+   "fetch_if_empty": 1,
+   "fieldname": "paid_to",
+   "fieldtype": "Link",
+   "label": "Account Paid To",
+   "mandatory_depends_on": "eval: doc.entitlement_type == \"Cash\"",
+   "options": "Account"
+  },
+  {
+   "fetch_from": "entitlement_voucher.paid_to_account_currency",
+   "fetch_if_empty": 1,
+   "fieldname": "paid_to_account_currency",
+   "fieldtype": "Link",
+   "label": "Account Currency (To)",
+   "options": "Currency"
+  },
+  {
+   "fieldname": "column_break_fvlg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "entitlement_voucher.bank_account",
+   "fetch_if_empty": 1,
+   "fieldname": "bank_account",
+   "fieldtype": "Link",
+   "label": "Company Bank Account",
+   "options": "Bank Account"
+  },
+  {
+   "fetch_from": "entitlement_voucher.party_bank_account",
+   "fetch_if_empty": 1,
+   "fieldname": "party_bank_account",
+   "fieldtype": "Link",
+   "label": "Party Bank Account",
+   "options": "Bank Account"
+  },
+  {
+   "fetch_from": "entitlement_voucher.party_bank_account_name",
+   "fetch_if_empty": 1,
+   "fieldname": "party_bank_account_name",
+   "fieldtype": "Data",
+   "label": "Party Bank Account Name"
+  },
+  {
+   "fetch_from": "entitlement_voucher.party_bank_account_no",
+   "fetch_if_empty": 1,
+   "fieldname": "party_bank_account_no",
+   "fieldtype": "Data",
+   "label": "Party Bank Account No"
+  },
+  {
+   "collapsible": 1,
    "fieldname": "commission_section",
    "fieldtype": "Section Break",
    "label": "Commission"
   },
   {
+   "fetch_from": "entitlement_voucher.sales_partner",
+   "fetch_if_empty": 1,
    "fieldname": "sales_partner",
    "fieldtype": "Link",
    "label": "Sales Partner",
@@ -326,16 +434,22 @@
    "fieldtype": "Column Break"
   },
   {
+   "fetch_from": "entitlement_voucher.amount_eligible_for_commission",
+   "fetch_if_empty": 1,
    "fieldname": "amount_eligible_for_commission",
    "fieldtype": "Currency",
    "label": "Amount Eligible for Commission"
   },
   {
+   "fetch_from": "entitlement_voucher.commission_rate",
+   "fetch_if_empty": 1,
    "fieldname": "commission_rate",
    "fieldtype": "Float",
    "label": "Commission Rate (%)"
   },
   {
+   "fetch_from": "entitlement_voucher.total_commission",
+   "fetch_if_empty": 1,
    "fieldname": "total_commission",
    "fieldtype": "Currency",
    "label": "Total Commission"
@@ -347,88 +461,11 @@
    "label": "Sales Team"
   },
   {
+   "fetch_from": "entitlement_voucher.sales_team",
    "fieldname": "sales_team",
    "fieldtype": "Table",
    "label": "Sales Team",
    "options": "Sales Team"
-  },
-  {
-   "fieldname": "company",
-   "fieldtype": "Link",
-   "in_filter": 1,
-   "in_list_view": 1,
-   "in_preview": 1,
-   "in_standard_filter": 1,
-   "label": "Company",
-   "options": "Company",
-   "reqd": 1
-  },
-  {
-   "fieldname": "posting_date",
-   "fieldtype": "Date",
-   "label": "Posting Date"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "section_break_wsis",
-   "fieldtype": "Section Break",
-   "label": "Accounting Details"
-  },
-  {
-   "fieldname": "column_break_fvlg",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "party_bank_account",
-   "fieldtype": "Link",
-   "label": "Party Bank Account",
-   "options": "Bank Account"
-  },
-  {
-   "fieldname": "paid_from",
-   "fieldtype": "Link",
-   "label": "Account Paid From",
-   "mandatory_depends_on": "eval: doc.entitlement_type == \"Cash\"",
-   "options": "Account"
-  },
-  {
-   "fieldname": "paid_to",
-   "fieldtype": "Link",
-   "label": "Account Paid To",
-   "mandatory_depends_on": "eval: doc.entitlement_type == \"Cash\"",
-   "options": "Account"
-  },
-  {
-   "fieldname": "bank_account",
-   "fieldtype": "Link",
-   "label": "Company Bank Account",
-   "options": "Bank Account"
-  },
-  {
-   "fetch_from": "party_bank_account.account_name",
-   "fieldname": "party_bank_account_name",
-   "fieldtype": "Data",
-   "label": "Party Bank Account Name"
-  },
-  {
-   "fetch_from": "party_bank_account.bank_account_no",
-   "fieldname": "party_bank_account_no",
-   "fieldtype": "Data",
-   "label": "Party Bank Account No"
-  },
-  {
-   "fetch_from": "paid_from.account_currency",
-   "fieldname": "paid_from_account_currency",
-   "fieldtype": "Link",
-   "label": "Account Currency (From)",
-   "options": "Currency"
-  },
-  {
-   "fetch_from": "paid_to.account_currency",
-   "fieldname": "paid_to_account_currency",
-   "fieldtype": "Link",
-   "label": "Account Currency (To)",
-   "options": "Currency"
   },
   {
    "fetch_from": "entitlement_voucher.rate",
@@ -452,7 +489,7 @@
    "link_fieldname": "entitlement_redemption"
   }
  ],
- "modified": "2026-07-03 02:04:51.680627",
+ "modified": "2026-07-17 21:00:00.000000",
  "modified_by": "Administrator",
  "module": "NPPOS",
  "name": "Entitlement Redemption",

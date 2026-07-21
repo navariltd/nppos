@@ -1,10 +1,13 @@
 "use client";
 
-import { Logo } from "@/components/logo";
-import { LayoutDashboard, LogIn, User } from "lucide-react";
+/** Application sidebar with navigation groups for authenticated and unauthenticated users. */
+
 import * as React from "react";
 import { Link } from "react-router-dom";
 
+import { CheckSquare, History, LayoutDashboard, LogIn } from "lucide-react";
+
+import { Logo } from "@/components/logo";
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
 import {
@@ -16,70 +19,77 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useUser } from "@/contexts/user-context";
-
-const data = {
-  navGroups: [],
-};
 
 const privateNavGroups = [
   {
-    label: "Main",
     items: [
       {
-        title: "POS",
+        title: "Search Voucher",
         url: "/pos",
         icon: LayoutDashboard,
       },
-    ],
-  },
-  {
-    label: "User Management",
-    items: [
       {
-        title: "Users",
-        url: "/users",
-        icon: User,
+        title: "Transaction History",
+        url: "/pos/transactions",
+        icon: History,
+      },
+      {
+        title: "Closing Entry",
+        url: "/pos/closing-entry",
+        icon: CheckSquare,
       },
     ],
   },
 ];
 
+function SidebarSkeleton() {
+  return (
+    <Sidebar>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" disabled>
+              <Skeleton className="size-8 rounded-lg" />
+              <div className="grid flex-1 text-left text-sm leading-tight gap-1">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-3 w-28" />
+              </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
+      <SidebarContent>
+        {[1, 2, 3].map((section) => (
+          <div key={section} className="px-3 py-2">
+            <Skeleton className="h-4 w-24 mb-3" />
+            <div className="space-y-1">
+              {[1, 2, 3].map((item) => (
+                <Skeleton key={item} className="h-8 w-full rounded-md" />
+              ))}
+            </div>
+          </div>
+        ))}
+      </SidebarContent>
+      <SidebarFooter>
+        <div className="p-2 flex items-center gap-2">
+          <Skeleton className="size-8 rounded-full" />
+          <div className="grid flex-1 gap-1">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-3 w-16" />
+          </div>
+        </div>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { user, isLoading, error, logout } = useUser();
+  const { user, isLoading, error } = useUser();
 
   if (isLoading) {
-    return (
-      <Sidebar {...props}>
-        <SidebarHeader>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton size="lg" asChild>
-                <Link to="/pos">
-                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                    <Logo size={24} className="text-current" />
-                  </div>
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">NP POS</span>
-                    <span className="truncate text-xs">Loading...</span>
-                  </div>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarHeader>
-        <SidebarContent>
-          <div className="flex items-center justify-center p-4">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-          </div>
-        </SidebarContent>
-        <SidebarFooter>
-          <div className="p-2 text-center text-sm text-muted-foreground">
-            Loading user...
-          </div>
-        </SidebarFooter>
-      </Sidebar>
-    );
+    return <SidebarSkeleton />;
   }
 
   if (error) {
@@ -110,9 +120,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        {data.navGroups.map((group) => (
-          <NavMain key={group.label} label={group.label} items={group.items} />
-        ))}
         {isAuthenticated ? (
           <>
             {privateNavGroups.map((group) => (
@@ -129,7 +136,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         {isAuthenticated ? (
-          <NavUser user={user} onLogout={logout} />
+          <NavUser user={user} />
         ) : (
           <div className="p-2">
             <Link
