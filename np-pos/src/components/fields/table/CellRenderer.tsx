@@ -1,7 +1,7 @@
 "use client";
 
-import * as React from "react";
-import { Autocomplete } from "../AutoComplete";
+import { cn } from "@/lib/utils";
+import { AutoComplete } from "../AutoComplete";
 import { Barcode } from "../Barcode";
 import { ButtonField } from "../Button";
 import { Check } from "../Check";
@@ -28,7 +28,6 @@ import { Password } from "../Password";
 import { Percent } from "../Percent";
 import { Phone } from "../Phone";
 import { Rating } from "../Rating";
-import { ReadOnly } from "../ReadOnly";
 import { Select } from "../Select";
 import { Signature } from "../Signature";
 import { SmallText } from "../SmallText";
@@ -37,7 +36,6 @@ import { Text } from "../Text";
 import { TextEditor } from "../TextEditor";
 import { Time } from "../Time";
 import type { DoctypeField } from "./types";
-import { cn } from "@/lib/utils";
 
 /**
  * Render a human-readable value for a read-only field based on fieldtype.
@@ -49,11 +47,18 @@ function renderReadOnlyValue(field: DoctypeField, value: any): string {
   if (field.fieldtype === "Check") {
     return value ? "✓" : "";
   }
-  if (field.fieldtype === "Float" || field.fieldtype === "Currency" || field.fieldtype === "Percent") {
+  if (
+    field.fieldtype === "Float" ||
+    field.fieldtype === "Currency" ||
+    field.fieldtype === "Percent"
+  ) {
     const num = Number(value);
     if (isNaN(num)) return String(value);
     return field.fieldtype === "Currency"
-      ? num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      ? num.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
       : field.fieldtype === "Percent"
         ? `${num}%`
         : String(num);
@@ -131,9 +136,9 @@ export const renderCellField = (
   }
 
   switch (field.fieldtype) {
-    case "Autocomplete":
+    case "AutoComplete":
       return (
-        <Autocomplete
+        <AutoComplete
           {...commonProps}
           options={
             field.options
@@ -220,9 +225,7 @@ export const renderCellField = (
     case "Select":
       return <Select {...commonProps} options={parseOptions(field.options)} />;
     case "Signature":
-      return (
-        <Signature {...commonProps} value={rawValue || null} />
-      );
+      return <Signature {...commonProps} value={rawValue || null} />;
     case "Small Text":
       return <SmallText {...commonProps} />;
     case "Table Multi Select":

@@ -1,7 +1,8 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Autocomplete } from "./AutoComplete";
+import { AutoComplete } from "./AutoComplete";
 import { Barcode } from "./Barcode";
 import { Check } from "./Check";
 import { ChildTable } from "./ChildTable";
@@ -33,10 +34,8 @@ import { Signature } from "./Signature";
 import { SmallText } from "./SmallText";
 import { Table } from "./Table";
 import { TableMultiSelect } from "./TableMultiSelect";
-import { Text } from "./Text";
 import { TextEditor } from "./TextEditor";
 import { Time } from "./Time";
-import { Button } from "@/components/ui/button";
 
 export interface FrappeFieldMeta {
   fieldname: string;
@@ -115,8 +114,9 @@ export interface FrappeFieldProps {
 
 const getFieldType = (fieldtype: string): string => {
   const type = fieldtype.toLowerCase().replace(/\s+/g, " ");
-  
-  if (type.includes("data") || type === "text" || type === "small_text") return "data";
+
+  if (type.includes("data") || type === "text" || type === "small_text")
+    return "data";
   if (type.includes("int") || type === "int") return "int";
   if (type.includes("float") || type === "float") return "float";
   if (type.includes("currency")) return "currency";
@@ -131,7 +131,8 @@ const getFieldType = (fieldtype: string): string => {
   if (type.includes("duration")) return "duration";
   if (type.includes("password")) return "password";
   if (type.includes("text") && type.includes("editor")) return "text_editor";
-  if (type.includes("text") && type.includes("markdown")) return "markdown_editor";
+  if (type.includes("text") && type.includes("markdown"))
+    return "markdown_editor";
   if (type.includes("text") && type.includes("html")) return "html_editor";
   if (type.includes("long_text") || type === "text") return "long_text";
   if (type.includes("small_text")) return "small_text";
@@ -150,33 +151,39 @@ const getFieldType = (fieldtype: string): string => {
   if (type.includes("button")) return "button";
   if (type.includes("heading")) return "heading";
   if (type.includes("fold")) return "fold";
-  if (type.includes("table") && type.includes("multi")) return "table_multi_select";
+  if (type.includes("table") && type.includes("multi"))
+    return "table_multi_select";
   if (type.includes("table")) return "table";
   if (type.includes("child_table")) return "child_table";
   if (type.includes("section_break")) return "section_break";
   if (type.includes("column_break")) return "column_break";
   if (type.includes("autocomplete")) return "autocomplete";
-  
+
   return "data";
 };
 
-const parseOptions = (options?: string | string[]): { label: string; value: string }[] => {
+const parseOptions = (
+  options?: string | string[],
+): { label: string; value: string }[] => {
   if (!options) return [];
-  
+
   if (Array.isArray(options)) {
-    return options.map(opt => {
+    return options.map((opt) => {
       if (typeof opt === "string") {
         return { label: opt, value: opt };
       }
       return opt;
     });
   }
-  
-  return options.split("\n").map(line => {
-    const trimmed = line.trim();
-    if (!trimmed) return { label: "", value: "" };
-    return { label: trimmed, value: trimmed };
-  }).filter(opt => opt.value !== "");
+
+  return options
+    .split("\n")
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return { label: "", value: "" };
+      return { label: trimmed, value: trimmed };
+    })
+    .filter((opt) => opt.value !== "");
 };
 
 export const FrappeField = ({
@@ -203,9 +210,9 @@ export const FrappeField = ({
   const isRequired = !!(field.required || field.reqd);
   const isReadOnly = field.read_only || props.read_only;
   const isHidden = field.hidden;
-  
+
   if (isHidden) return null;
-  
+
   if (fieldType === "section_break") {
     return (
       <div className={cn("col-span-full my-4", className)}>
@@ -213,22 +220,26 @@ export const FrappeField = ({
       </div>
     );
   }
-  
+
   if (fieldType === "column_break") {
     return <div className={cn("w-full", className)} />;
   }
-  
+
   if (fieldType === "heading") {
     return (
       <div className={cn("col-span-full", className)}>
-        <h3 className="text-lg font-semibold">{field.label || field.fieldname}</h3>
+        <h3 className="text-lg font-semibold">
+          {field.label || field.fieldname}
+        </h3>
         {field.description && (
-          <p className="text-sm text-muted-foreground mt-1">{field.description}</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {field.description}
+          </p>
         )}
       </div>
     );
   }
-  
+
   if (fieldType === "fold") {
     return (
       <Fold
@@ -238,28 +249,30 @@ export const FrappeField = ({
         className={className}
         disabled={disabled}
       >
-        {value && typeof value === 'object' && Object.keys(value).map((key) => {
-          const nestedField: FrappeFieldMeta = {
-            fieldname: key,
-            fieldtype: 'Data',
-            label: key,
-          };
-          return (
-            <FrappeField
-              key={key}
-              field={nestedField}
-              value={value[key]}
-              onChange={(val) => {
-                const newValue = { ...value, [key]: val };
-                onChange?.(newValue);
-              }}
-            />
-          );
-        })}
+        {value &&
+          typeof value === "object" &&
+          Object.keys(value).map((key) => {
+            const nestedField: FrappeFieldMeta = {
+              fieldname: key,
+              fieldtype: "Data",
+              label: key,
+            };
+            return (
+              <FrappeField
+                key={key}
+                field={nestedField}
+                value={value[key]}
+                onChange={(val) => {
+                  const newValue = { ...value, [key]: val };
+                  onChange?.(newValue);
+                }}
+              />
+            );
+          })}
       </Fold>
     );
   }
-  
+
   const commonProps = {
     value: value ?? field.default ?? "",
     onChange: (val: any) => onChange?.(val, field.fieldname),
@@ -271,7 +284,7 @@ export const FrappeField = ({
     description: field.description,
     className: cn(width && `w-[${width}px]`, className),
   };
-  
+
   const renderField = () => {
     switch (fieldType) {
       case "data":
@@ -280,33 +293,39 @@ export const FrappeField = ({
         return (
           <Data
             {...commonProps}
-            type={fieldType === "email" ? "email" : fieldType === "url" ? "url" : "text"}
+            type={
+              fieldType === "email"
+                ? "email"
+                : fieldType === "url"
+                  ? "url"
+                  : "text"
+            }
             maxLength={field.length}
             pattern={field.regex}
           />
         );
-      
+
       case "int":
         return (
-          <Int 
-            {...commonProps} 
-            min={field.min_value} 
+          <Int
+            {...commonProps}
+            min={field.min_value}
             max={field.max_value}
             nonNegative={field.non_negative}
           />
         );
-      
+
       case "float":
         return (
-          <Float 
-            {...commonProps} 
-            precision={field.precision} 
-            min={field.min_value} 
+          <Float
+            {...commonProps}
+            precision={field.precision}
+            min={field.min_value}
             max={field.max_value}
             nonNegative={field.non_negative}
           />
         );
-      
+
       case "currency":
         return (
           <Currency
@@ -318,18 +337,18 @@ export const FrappeField = ({
             nonNegative={field.non_negative}
           />
         );
-      
+
       case "percent":
         return (
-          <Percent 
-            {...commonProps} 
+          <Percent
+            {...commonProps}
             precision={field.precision}
             min={field.min_value}
             max={field.max_value}
             nonNegative={field.non_negative}
           />
         );
-      
+
       case "check":
         return (
           <Check
@@ -338,15 +357,16 @@ export const FrappeField = ({
             onChange={(val) => onChange?.(val ? 1 : 0, field.fieldname)}
           />
         );
-      
+
       case "select": {
         const selectOptions = parseOptions(optionsProp || field.options);
         return <Select {...commonProps} options={selectOptions} />;
       }
-      
+
       case "link": {
         // For Link field, options is the target DocType (istable == 0)
-        const linkDoctype = typeof field.options === "string" ? field.options : (doctype ?? "");
+        const linkDoctype =
+          typeof field.options === "string" ? field.options : (doctype ?? "");
         return (
           <LinkField
             {...commonProps}
@@ -356,9 +376,11 @@ export const FrappeField = ({
           />
         );
       }
-      
+
       case "dynamic_link": {
-        const refDoctype = referenceDoctype || (typeof field.options === "string" ? field.options : "");
+        const refDoctype =
+          referenceDoctype ||
+          (typeof field.options === "string" ? field.options : "");
         return (
           <DynamicLink
             {...commonProps}
@@ -369,68 +391,85 @@ export const FrappeField = ({
           />
         );
       }
-      
+
       case "date":
         return <Date {...commonProps} hideDays={field.hide_days} />;
-      
+
       case "datetime":
-        return <Datetime {...commonProps} hideDays={field.hide_days} hideSeconds={field.hide_seconds} />;
-      
+        return (
+          <Datetime
+            {...commonProps}
+            hideDays={field.hide_days}
+            hideSeconds={field.hide_seconds}
+          />
+        );
+
       case "time":
         return <Time {...commonProps} hideSeconds={field.hide_seconds} />;
-      
+
       case "duration":
-        return <Duration {...commonProps} hideDays={field.hide_days} hideSeconds={field.hide_seconds} />;
-      
+        return (
+          <Duration
+            {...commonProps}
+            hideDays={field.hide_days}
+            hideSeconds={field.hide_seconds}
+          />
+        );
+
       case "password":
         return <Password {...commonProps} />;
-      
+
       case "text_editor":
         return <TextEditor {...commonProps} />;
-      
+
       case "markdown_editor":
         return <MarkdownEditor {...commonProps} />;
-      
+
       case "html_editor":
         return <HTMLEditor {...commonProps} />;
-      
+
       case "long_text":
       case "text":
         return <LongText {...commonProps} maxLength={field.length} rows={5} />;
-      
+
       case "small_text":
         return <SmallText {...commonProps} maxLength={field.length} />;
-      
+
       case "phone":
         return <Phone {...commonProps} mask={field.mask} />;
-      
+
       case "code":
-        return <Code {...commonProps} language={typeof field.options === "string" ? field.options : ""} />;
-      
+        return (
+          <Code
+            {...commonProps}
+            language={typeof field.options === "string" ? field.options : ""}
+          />
+        );
+
       case "color":
         return <Color {...commonProps} />;
-      
+
       case "rating":
         return <Rating {...commonProps} max={5} />;
-      
+
       case "barcode":
         return <Barcode {...commonProps} value={value || ""} />;
-      
+
       case "image":
         return <Image {...commonProps} value={value} />;
-      
+
       case "signature":
         return <Signature {...commonProps} value={value} />;
-      
+
       case "geolocation":
         return <Geolocation {...commonProps} value={value} />;
-      
+
       case "json":
         return <JSON {...commonProps} value={value} />;
-      
+
       case "read_only":
         return <ReadOnly {...commonProps} value={value} />;
-      
+
       case "button":
         return (
           <div className={cn("flex flex-col gap-1.5", className)}>
@@ -449,40 +488,33 @@ export const FrappeField = ({
             </Button>
           </div>
         );
-      
+
       case "autocomplete":
         return (
-          <Autocomplete
+          <AutoComplete
             {...commonProps}
             options={parseOptions(optionsProp || field.options)}
           />
         );
-      
+
       case "table": {
         // For Table field, options is the child DocType name (istable == 1)
-        const tableDoctype = typeof field.options === "string" ? field.options : "";
-        return (
-          <Table
-            {...commonProps}
-            doctype={tableDoctype}
-            value={value}
-          />
-        );
+        const tableDoctype =
+          typeof field.options === "string" ? field.options : "";
+        return <Table {...commonProps} doctype={tableDoctype} value={value} />;
       }
-      
+
       case "child_table": {
-        const childDoctype = typeof field.options === "string" ? field.options : "";
+        const childDoctype =
+          typeof field.options === "string" ? field.options : "";
         return (
-          <ChildTable
-            {...commonProps}
-            doctype={childDoctype}
-            value={value}
-          />
+          <ChildTable {...commonProps} doctype={childDoctype} value={value} />
         );
       }
-      
+
       case "table_multi_select": {
-        const tableDoctype = typeof field.options === "string" ? field.options : "";
+        const tableDoctype =
+          typeof field.options === "string" ? field.options : "";
         return (
           <TableMultiSelect
             doctype={tableDoctype}
@@ -499,12 +531,12 @@ export const FrappeField = ({
           />
         );
       }
-      
+
       default:
         return <Data {...commonProps} />;
     }
   };
-  
+
   return (
     <div
       className={cn(
