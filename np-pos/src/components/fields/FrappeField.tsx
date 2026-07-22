@@ -1,7 +1,8 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Autocomplete } from "./AutoComplete";
+import { AutoComplete } from "./AutoComplete";
 import { Barcode } from "./Barcode";
 import { Check } from "./Check";
 import { ChildTable } from "./ChildTable";

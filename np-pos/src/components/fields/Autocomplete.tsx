@@ -5,7 +5,7 @@ import { Check, ChevronDown, Loader2, Search, X } from "lucide-react";
 import * as React from "react";
 import { createPortal } from "react-dom";
 
-export interface AutocompleteOption {
+export interface AutoCompleteOption {
   label: string;
   value: string;
   extra?: any;
@@ -15,10 +15,10 @@ export interface AutocompleteOption {
   metadata?: Record<string, any>;
 }
 
-interface AutocompleteProps {
-  options: AutocompleteOption[];
+interface AutoCompleteProps {
+  options: AutoCompleteOption[];
   value: string;
-  onChange: (val: string, option?: AutocompleteOption) => void;
+  onChange: (val: string, option?: AutoCompleteOption) => void;
   onBlur?: () => void;
   placeholder?: string;
   className?: string;
@@ -31,7 +31,7 @@ interface AutocompleteProps {
   debounceDelay?: number;
 }
 
-export const Autocomplete = ({
+export const AutoComplete = ({
   options = [],
   value,
   onChange,
@@ -45,7 +45,7 @@ export const Autocomplete = ({
   label,
   onSearch,
   debounceDelay = 300,
-}: AutocompleteProps) => {
+}: AutoCompleteProps) => {
   const [isOpen, setIsOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [highlightedIndex, setHighlightedIndex] = React.useState(-1);
@@ -82,7 +82,7 @@ export const Autocomplete = ({
   );
 
   const handleSelect = React.useCallback(
-    (opt: AutocompleteOption) => {
+    (opt: AutoCompleteOption) => {
       isSelectingRef.current = true;
       onChange(opt.value, opt);
       setIsOpen(false);

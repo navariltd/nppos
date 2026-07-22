@@ -1,7 +1,7 @@
 "use client";
 
-import * as React from "react";
-import { Autocomplete } from "../AutoComplete";
+import { cn } from "@/lib/utils";
+import { AutoComplete } from "../AutoComplete";
 import { Barcode } from "../Barcode";
 import { ButtonField } from "../Button";
 import { Check } from "../Check";
@@ -131,9 +131,9 @@ export const renderCellField = (
   }
 
   switch (field.fieldtype) {
-    case "Autocomplete":
+    case "AutoComplete":
       return (
-        <Autocomplete
+        <AutoComplete
           {...commonProps}
           options={
             field.options

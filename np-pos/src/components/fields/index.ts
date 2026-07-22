@@ -1,9 +1,13 @@
 // Field components that emulate Frappe field types using shadcn/ui
-export { FrappeField, type FrappeFieldMeta, type FrappeFieldProps } from "./FrappeField";
-export { FrappeField as default } from "./FrappeField";
+export {
+  FrappeField as default,
+  FrappeField,
+  type FrappeFieldMeta,
+  type FrappeFieldProps,
+} from "./FrappeField";
 
 // Individual field components
-export { Autocomplete } from "./AutoComplete";
+export { AutoComplete } from "./AutoComplete";
 export { Barcode } from "./Barcode";
 export { ButtonField as Button } from "./Button";
 export { Check } from "./Check";
