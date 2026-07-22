@@ -1,6 +1,7 @@
 "use client";
 
 import { BellDot, CircleUser, EllipsisVertical, LogOut, Palette } from "lucide-react";
+import { useNotifications } from "@/contexts/notification-context";
 import { Link, useNavigate } from "react-router-dom";
 
 import { Logo } from "@/components/logo";
@@ -34,8 +35,9 @@ export function NavUser({
   onOpenCustomizer?: () => void;
 }) {
   const { isMobile } = useSidebar();
-  const { logout } = useFrappeAuth();
   const navigate = useNavigate();
+  const { logout } = useFrappeAuth();
+  const { unreadCount } = useNotifications();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
@@ -98,12 +100,6 @@ export function NavUser({
                   Account
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild className="cursor-pointer">
-                <Link to="/settings/notifications">
-                  <BellDot />
-                  Notifications
-                </Link>
-              </DropdownMenuItem>
               {onOpenCustomizer && (
                 <DropdownMenuItem
                   className="cursor-pointer"
@@ -114,10 +110,24 @@ export function NavUser({
                   }}
                 >
                   <Palette />
-                  Customizer
+                  Customize Theme
                 </DropdownMenuItem>
               )}
             </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild className="cursor-pointer">
+              <Link to="/settings/notifications" className="flex items-center justify-between w-full">
+                <span className="flex items-center gap-2">
+                  <BellDot />
+                  <span>Notifications</span>
+                </span>
+                {unreadCount > 0 && (
+                  <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold leading-none text-white ring-2 ring-white shadow-sm">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="cursor-pointer"

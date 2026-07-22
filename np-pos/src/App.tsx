@@ -2,6 +2,7 @@ import { AppRouter } from "@/components/router/app-router";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { SidebarConfigProvider } from "@/contexts/sidebar-context";
+import { NotificationProvider } from "@/contexts/notification-context";
 import { UserProvider } from "@/contexts/user-context";
 import { FrappeProvider } from "frappe-react-sdk";
 import { BrowserRouter as Router } from "react-router-dom";
@@ -19,6 +20,7 @@ function App() {
     <div className="font-sans antialiased" style={{ fontFamily: "var(--font-inter)" }}>
       <FrappeProvider enableSocket={false} swrConfig={{ revalidateOnFocus: false, revalidateOnReconnect: false }}>
         <UserProvider>
+          <NotificationProvider>
           <ThemeProvider defaultTheme="system" storageKey="np-pos-theme">
             <SidebarConfigProvider>
               <Router basename={basename}>
@@ -28,6 +30,7 @@ function App() {
               </Router>
             </SidebarConfigProvider>
           </ThemeProvider>
+          </NotificationProvider>
         </UserProvider>
       </FrappeProvider>
     </div>
