@@ -108,3 +108,13 @@ export const DOCSTATUS_MAP: Record<
   1: { label: "Submitted", variant: "success" },
   2: { label: "Cancelled", variant: "destructive" },
 };
+
+export interface WorkflowTransition {
+  name: string;
+  state: string;
+  action: string;
+  next_state: string;
+  allowed: string;
+  allow_self_approval: number;
+  condition: string | null;
+}

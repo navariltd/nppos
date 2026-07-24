@@ -13,28 +13,33 @@ interface UseFormActionsOptions {
   isNew: boolean;
   onSuccess?: (name: string) => void;
   onError?: (msg: string) => void;
+  onWorkflowSuccess?: () => void;
 }
 
 interface UseFormActionsReturn {
   isSaving: boolean;
   isSubmitting: boolean;
   isCancelling: boolean;
+  isTransitioning: boolean;
   handleSave: () => Promise<void>;
   handleSubmit: () => Promise<void>;
   handleCancel: () => Promise<void>;
   handleDuplicate: () => void;
   handleAmend: () => void;
+  handleWorkflowAction: (action: string) => Promise<void>;
 }
 
 export function useFormActions(opts: UseFormActionsOptions): UseFormActionsReturn {
-  const { doctype, docId, form, isNew, onSuccess, onError } = opts;
+  const { doctype, docId, form, isNew, onSuccess, onError, onWorkflowSuccess } = opts;
   const navigate = useNavigate();
   const { call: updateDoc } = useFrappePostCall("frappe.client.save");
   const { call: saveDocs } = useFrappePostCall("frappe.desk.form.save.savedocs");
+  const { call: applyWorkflow } = useFrappePostCall("frappe.model.workflow.apply_workflow");
 
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   const handleSave = useCallback(async () => {
     if (!doctype) return;
@@ -129,5 +134,30 @@ export function useFormActions(opts: UseFormActionsOptions): UseFormActionsRetur
     navigate(`/app/${doctype.toLowerCase().replace(/ /g, "-")}/new`, { state: { routeOptions: a } });
   }, [form, doctype, docId, navigate]);
 
-  return { isSaving, isSubmitting, isCancelling, handleSave, handleSubmit, handleCancel, handleDuplicate, handleAmend };
+  const handleWorkflowAction = useCallback(async (action: string) => {
+    if (!doctype || !docId) return;
+    setIsTransitioning(true);
+    try {
+      const res: any = await applyWorkflow({
+        doc: { ...form, doctype, name: docId },
+        action,
+      });
+      if (res?.message) {
+        toast.success(`${action} successful`);
+        onWorkflowSuccess?.();
+      }
+    } catch (err: any) {
+      const msg = parseFrappeError(err);
+      onError?.(msg);
+      toast.error(msg);
+    } finally {
+      setIsTransitioning(false);
+    }
+  }, [doctype, docId, form, onError, onWorkflowSuccess, applyWorkflow]);
+
+  return {
+    isSaving, isSubmitting, isCancelling, isTransitioning,
+    handleSave, handleSubmit, handleCancel, handleDuplicate, handleAmend,
+    handleWorkflowAction,
+  };
 }

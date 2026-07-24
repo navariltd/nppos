@@ -48,6 +48,44 @@ export function ConfirmSubmitDialog({
   );
 }
 
+interface ErrorDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title?: string;
+  message: string;
+}
+
+export function ErrorDialog({
+  open,
+  onOpenChange,
+  title = "Error",
+  message,
+}: ErrorDialogProps) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent className="max-w-lg">
+        <AlertDialogHeader>
+          <div className="flex items-center justify-between">
+            <AlertDialogTitle className="text-destructive">{title}</AlertDialogTitle>
+            <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-6 w-6">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <AlertDialogDescription asChild>
+            <div
+              className="text-sm text-foreground mt-2 max-h-[60vh] overflow-y-auto"
+              dangerouslySetInnerHTML={{ __html: message }}
+            />
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogAction onClick={() => onOpenChange(false)}>Close</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 interface ConfirmCancelDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;

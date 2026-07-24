@@ -50,6 +50,7 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [hasBeenSaved, setHasBeenSaved] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
 
   const { data: schemaData, error: schemaError } = useFrappeGetCall(
     "frappe.desk.form.load.getdoctype", { doctype, with_parent: 1 },
@@ -61,14 +62,22 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
     doctype && docId && !isNew ? `dtf-doc-${doctype}-${docId}` : null,
   );
 
+  const { hasWorkflow, workflowTransitions, currentWorkflowState, handleWorkflowSuccess } = useWorkflow({
+    doctype, docId, form, isNew, meta: metaConfig,
+  });
+
   const {
-    isSaving, isSubmitting, isCancelling,
-    handleSave, handleSubmit, handleCancel,
-    handleDuplicate, handleAmend,
+    isSaving, isSubmitting, isCancelling, isTransitioning,
+    handleSave, handleSubmit, handleCancel, handleDuplicate, handleAmend,
+    handleWorkflowAction,
   } = useFormActions({
     doctype, docId, form, isNew,
     onSuccess,
-    onError: (msg) => setError(msg),
+    onError: (msg) => { setError(msg); setErrorDialogOpen(true); },
+    onWorkflowSuccess: async () => {
+      await handleWorkflowSuccess();
+      await reloadDoc();
+    },
   });
 
   const routeOptions = useMemo(() => {
@@ -209,7 +218,7 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
         form={form}
         docId={docId}
         docstatus={docstatus}
-        isBusy={isSaving || isSubmitting || isCancelling}
+        isBusy={isSaving || isSubmitting || isCancelling || isTransitioning}
         isEditing={isEditing}
         isSubmittable={isSubmittable}
         savedName={null}
@@ -225,6 +234,11 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
         onCancel={() => setConfirmAction("cancel")}
         onAmend={handleAmend}
         onDuplicate={docstatus === 0 && !isNew ? handleDuplicate : undefined}
+        hasWorkflow={hasWorkflow}
+        workflowTransitions={workflowTransitions}
+        currentWorkflowState={currentWorkflowState}
+        isTransitioning={isTransitioning}
+        onWorkflowAction={handleWorkflowAction}
       />
 
       <TabbedForm
@@ -249,6 +263,13 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
         doctypeLabel={doctypeLabel}
         isSubmitting={isSubmitting}
         onConfirm={() => { setConfirmAction(null); handleSubmit(); }}
+      />
+
+      <ErrorDialog
+        open={errorDialogOpen}
+        onOpenChange={setErrorDialogOpen}
+        title="Error"
+        message={error || ""}
       />
 
       <ConfirmCancelDialog
