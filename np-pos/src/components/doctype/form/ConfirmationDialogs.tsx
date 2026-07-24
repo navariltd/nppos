@@ -1,9 +1,7 @@
-/**
- * ConfirmationDialogs – reusable AlertDialog components for submit and cancel actions.
- *
- * Key dependencies: shadcn/ui AlertDialog, used by DocTypeForm for submit/cancel confirmation.
- */
+/** AlertDialog components for submit confirmation, cancel confirmation, and error display. */
 
+import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +21,6 @@ interface ConfirmSubmitDialogProps {
   onConfirm: () => void;
 }
 
-/** Dialog confirming submission of a document. */
 export function ConfirmSubmitDialog({
   open,
   onOpenChange,
@@ -59,7 +56,6 @@ interface ConfirmCancelDialogProps {
   onConfirm: () => void;
 }
 
-/** Dialog confirming cancellation of a submitted document. */
 export function ConfirmCancelDialog({
   open,
   onOpenChange,

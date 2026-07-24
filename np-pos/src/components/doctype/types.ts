@@ -1,4 +1,4 @@
-/** Shared types for DocTypeList and DocTypeForm components. */
+/** Shared type definitions for DocType list and form components. */
 
 export interface AppListColumn {
   fieldname: string;

@@ -1,6 +1,4 @@
-/**
- * Form actions hook – manages save, submit, cancel, duplicate, and amend for DocTypeForm.
- */
+/** Hook managing save, submit, cancel, duplicate, amend, and workflow actions for DocTypeForm. */
 
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
