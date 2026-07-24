@@ -1,9 +1,7 @@
-/**
- * ConfirmationDialogs – reusable AlertDialog components for submit and cancel actions.
- *
- * Key dependencies: shadcn/ui AlertDialog, used by DocTypeForm for submit/cancel confirmation.
- */
+/** AlertDialog components for submit confirmation, cancel confirmation, and error display. */
 
+import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +21,6 @@ interface ConfirmSubmitDialogProps {
   onConfirm: () => void;
 }
 
-/** Dialog confirming submission of a document. */
 export function ConfirmSubmitDialog({
   open,
   onOpenChange,
@@ -51,6 +48,44 @@ export function ConfirmSubmitDialog({
   );
 }
 
+interface ErrorDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title?: string;
+  message: string;
+}
+
+export function ErrorDialog({
+  open,
+  onOpenChange,
+  title = "Error",
+  message,
+}: ErrorDialogProps) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent className="max-w-lg">
+        <AlertDialogHeader>
+          <div className="flex items-center justify-between">
+            <AlertDialogTitle className="text-destructive">{title}</AlertDialogTitle>
+            <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-6 w-6">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <AlertDialogDescription asChild>
+            <div
+              className="text-sm text-foreground mt-2 max-h-[60vh] overflow-y-auto"
+              dangerouslySetInnerHTML={{ __html: message }}
+            />
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogAction onClick={() => onOpenChange(false)}>Close</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 interface ConfirmCancelDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -59,7 +94,6 @@ interface ConfirmCancelDialogProps {
   onConfirm: () => void;
 }
 
-/** Dialog confirming cancellation of a submitted document. */
 export function ConfirmCancelDialog({
   open,
   onOpenChange,

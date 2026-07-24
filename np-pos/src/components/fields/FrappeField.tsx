@@ -2,7 +2,6 @@
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { AutoComplete } from "./AutoComplete";
 import { Barcode } from "./Barcode";
 import { Check } from "./Check";
 import { ChildTable } from "./ChildTable";
@@ -157,7 +156,6 @@ const getFieldType = (fieldtype: string): string => {
   if (type.includes("child_table")) return "child_table";
   if (type.includes("section_break")) return "section_break";
   if (type.includes("column_break")) return "column_break";
-  if (type.includes("autocomplete")) return "autocomplete";
 
   return "data";
 };
@@ -487,14 +485,6 @@ export const FrappeField = ({
               {field.label || field.fieldname}
             </Button>
           </div>
-        );
-
-      case "autocomplete":
-        return (
-          <AutoComplete
-            {...commonProps}
-            options={parseOptions(optionsProp || field.options)}
-          />
         );
 
       case "table": {

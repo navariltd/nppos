@@ -1,23 +1,20 @@
-/**
- * DocTypeForm – full document form for any Frappe doctype, with save/submit/cancel and tabbed layout.
- *
- * Key dependencies: frappe-react-sdk for API calls, TabbedForm for field layout, ConfirmationDialogs.
- */
+/** Full document form for any Frappe doctype with save/submit/cancel, tabbed layout, and workflow support. */
 
 "use client";
 
+import { useFrappeGetCall } from "frappe-react-sdk";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { useFrappeGetCall } from "frappe-react-sdk";
 import { toast } from "sonner";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUser } from "@/contexts/user-context";
-import { ConfirmCancelDialog, ConfirmSubmitDialog } from "./form/ConfirmationDialogs";
+import { ConfirmCancelDialog, ConfirmSubmitDialog, ErrorDialog } from "./form/ConfirmationDialogs";
 import { FormHeader } from "./form/FormHeader";
 import { TabbedForm } from "./form/TabbedForm";
-import { isPermissionError, parseFrappeError } from "./form/parse-error";
 import { useFormActions } from "./form/form-actions";
+import { useWorkflow } from "./form/useWorkflow";
+import { isPermissionError, parseFrappeError } from "./form/parse-error";
 import type { FrappeFieldMeta } from "./types";
 
 interface DocTypeFormProps {
@@ -53,6 +50,7 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [hasBeenSaved, setHasBeenSaved] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
 
   const { data: schemaData, error: schemaError } = useFrappeGetCall(
     "frappe.desk.form.load.getdoctype", { doctype, with_parent: 1 },
@@ -64,14 +62,22 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
     doctype && docId && !isNew ? `dtf-doc-${doctype}-${docId}` : null,
   );
 
+  const { hasWorkflow, workflowTransitions, currentWorkflowState, handleWorkflowSuccess } = useWorkflow({
+    doctype, docId, form, isNew, meta: metaConfig,
+  });
+
   const {
-    isSaving, isSubmitting, isCancelling,
-    handleSave, handleSubmit, handleCancel,
-    handleDuplicate, handleAmend,
+    isSaving, isSubmitting, isCancelling, isTransitioning,
+    handleSave, handleSubmit, handleCancel, handleDuplicate, handleAmend,
+    handleWorkflowAction,
   } = useFormActions({
     doctype, docId, form, isNew,
     onSuccess,
-    onError: (msg) => setError(msg),
+    onError: (msg) => { setError(msg); setErrorDialogOpen(true); },
+    onWorkflowSuccess: async () => {
+      await handleWorkflowSuccess();
+      await reloadDoc();
+    },
   });
 
   const routeOptions = useMemo(() => {
@@ -116,10 +122,7 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
       if (!df || df.no_copy || key.startsWith("__") || key === "name" || key === "doctype") continue;
       let val: any = value;
       if (typeof val === "string") {
-        try {
-          const parsed = JSON.parse(val);
-          if (!Array.isArray(parsed) && typeof parsed === "object" && parsed !== null) val = parsed;
-        } catch {}
+        try { const parsed = JSON.parse(val); if (!Array.isArray(parsed) && typeof parsed === "object" && parsed !== null) val = parsed; } catch {}
       }
       prefill[key] = val;
       hasAny = true;
@@ -142,10 +145,7 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
       return;
     }
     if (docError) {
-      if (isPermissionError(docError)) {
-        navigate("/errors/forbidden", { replace: true });
-        return;
-      }
+      if (isPermissionError(docError)) { navigate("/errors/forbidden", { replace: true }); return; }
       const msg = parseFrappeError(docError);
       setError(msg);
       toast.error(msg);
@@ -163,20 +163,14 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
       }
       setIsLoadingDoc(false);
     }
-  }, [docData, docError, isNew, metaReady, routeOptions]);
+  }, [docData, docError, isNew, metaReady, routeOptions, navigate]);
 
   useEffect(() => {
-    if (isNew && metaReady && isLoadingDoc) {
-      setIsLoadingDoc(false);
-      setIsEditing(true);
-    }
+    if (isNew && metaReady && isLoadingDoc) { setIsLoadingDoc(false); setIsEditing(true); }
   }, [isNew, metaReady, isLoadingDoc]);
 
   useEffect(() => {
-    if (isNew) {
-      setIsEditing(true);
-      return;
-    }
+    if (isNew) { setIsEditing(true); return; }
     if (originalDoc) {
       const isDirty = JSON.stringify(form) !== JSON.stringify(originalDoc);
       setIsEditing(isDirty);
@@ -188,27 +182,15 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
     if (!metaReady || !schemaFields.length) return;
     const collapsed: Record<string, boolean> = {};
     schemaFields.forEach((f: any) => {
-      if (f.fieldtype === "Section Break" && f.collapsible) {
-        collapsed[f.fieldname] = f.collapsed !== 0;
-      }
+      if (f.fieldtype === "Section Break" && f.collapsible) collapsed[f.fieldname] = f.collapsed !== 0;
     });
     setCollapsedSections(collapsed);
   }, [metaReady, schemaFields]);
 
   const toggleSection = (fn: string) => setCollapsedSections((p) => ({ ...p, [fn]: !p[fn] }));
-  const handleChange = (value: any, fieldname?: string) => {
-    if (!fieldname) return;
-    setForm((p) => ({ ...p, [fieldname]: value }));
-  };
-  const handleBack = () => {
-    if (onBack) onBack();
-    else navigate(`/app/${doctype.toLowerCase().replace(/ /g, "-")}`);
-  };
-  const handleReset = () => {
-    setForm(JSON.parse(JSON.stringify(originalDoc)));
-    setIsEditing(false);
-    setError(null);
-  };
+  const handleChange = (value: any, fieldname?: string) => { if (!fieldname) return; setForm((p) => ({ ...p, [fieldname]: value })); };
+  const handleBack = () => { if (onBack) onBack(); else navigate(`/app/${doctype.toLowerCase().replace(/ /g, "-")}`); };
+  const handleReset = () => { setForm(JSON.parse(JSON.stringify(originalDoc))); setIsEditing(false); setError(null); };
 
   if (userLoading || !metaReady) {
     return (
@@ -236,7 +218,7 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
         form={form}
         docId={docId}
         docstatus={docstatus}
-        isBusy={isSaving || isSubmitting || isCancelling}
+        isBusy={isSaving || isSubmitting || isCancelling || isTransitioning}
         isEditing={isEditing}
         isSubmittable={isSubmittable}
         savedName={null}
@@ -252,6 +234,11 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
         onCancel={() => setConfirmAction("cancel")}
         onAmend={handleAmend}
         onDuplicate={docstatus === 0 && !isNew ? handleDuplicate : undefined}
+        hasWorkflow={hasWorkflow}
+        workflowTransitions={workflowTransitions}
+        currentWorkflowState={currentWorkflowState}
+        isTransitioning={isTransitioning}
+        onWorkflowAction={handleWorkflowAction}
       />
 
       <TabbedForm
@@ -276,6 +263,13 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
         doctypeLabel={doctypeLabel}
         isSubmitting={isSubmitting}
         onConfirm={() => { setConfirmAction(null); handleSubmit(); }}
+      />
+
+      <ErrorDialog
+        open={errorDialogOpen}
+        onOpenChange={setErrorDialogOpen}
+        title="Error"
+        message={error || ""}
       />
 
       <ConfirmCancelDialog

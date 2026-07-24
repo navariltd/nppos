@@ -1,4 +1,4 @@
-/** Shared types for DocTypeList and DocTypeForm components. */
+/** Shared type definitions for DocType list and form components. */
 
 export interface AppListColumn {
   fieldname: string;
@@ -108,3 +108,13 @@ export const DOCSTATUS_MAP: Record<
   1: { label: "Submitted", variant: "success" },
   2: { label: "Cancelled", variant: "destructive" },
 };
+
+export interface WorkflowTransition {
+  name: string;
+  state: string;
+  action: string;
+  next_state: string;
+  allowed: string;
+  allow_self_approval: number;
+  condition: string | null;
+}
