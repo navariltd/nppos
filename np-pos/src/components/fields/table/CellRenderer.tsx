@@ -1,7 +1,6 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { AutoComplete } from "../AutoComplete";
 import { Barcode } from "../Barcode";
 import { ButtonField } from "../Button";
 import { Check } from "../Check";
@@ -136,20 +135,6 @@ export const renderCellField = (
   }
 
   switch (field.fieldtype) {
-    case "AutoComplete":
-      return (
-        <AutoComplete
-          {...commonProps}
-          options={
-            field.options
-              ? (JSON.parse(field.options as string) as string[]).map(
-                  (o: string) =>
-                    typeof o === "string" ? { label: o, value: o } : (o as any),
-                )
-              : []
-          }
-        />
-      );
     case "Barcode":
       return <Barcode {...commonProps} />;
     case "Button":

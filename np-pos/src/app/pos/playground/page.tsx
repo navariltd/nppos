@@ -58,7 +58,6 @@ const FIELD_TYPES = [
   "JSON",
   "Read Only",
   "Button",
-  "AutoComplete",
   "Table",
   "Table MultiSelect",
   "Fold",
@@ -311,8 +310,7 @@ export default function PlaygroundPage() {
       defaultOptions = "Option 1\nOption 2\nOption 3";
     } else if (
       fieldType === "Link" ||
-      fieldType === "Dynamic Link" ||
-      fieldType === "AutoComplete"
+      fieldType === "Dynamic Link"
     ) {
       defaultOptions = parentDoctypes.length > 0 ? parentDoctypes[0] : "";
     } else if (fieldType === "Table" || fieldType === "Table MultiSelect") {
@@ -405,7 +403,6 @@ export default function PlaygroundPage() {
       JSON: "JSON editor",
       "Read Only": "Read-only display",
       Button: "Action button",
-      AutoComplete: "AutoComplete with search (istable == 0)",
       Table: "Child table (istable == 1) with multiple rows",
       "Table MultiSelect": "Multi-select table (istable == 1)",
       Fold: "Collapsible section",
@@ -453,8 +450,7 @@ export default function PlaygroundPage() {
 
   const isLinkField =
     selectedFieldType === "Link" ||
-    selectedFieldType === "Dynamic Link" ||
-    selectedFieldType === "AutoComplete";
+    selectedFieldType === "Dynamic Link";
   const isTableField =
     selectedFieldType === "Table" || selectedFieldType === "Table MultiSelect";
   const currentDoctypes = isTableField
@@ -547,7 +543,6 @@ export default function PlaygroundPage() {
                 selectedFieldType === "Link" ||
                 selectedFieldType === "Table" ||
                 selectedFieldType === "Table MultiSelect" ||
-                selectedFieldType === "AutoComplete" ||
                 selectedFieldType === "Dynamic Link") && (
                 <div className="space-y-2">
                   <Label htmlFor="options">Options</Label>
