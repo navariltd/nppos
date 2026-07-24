@@ -7,17 +7,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { callPost } from "@/lib/frappe-service";
-import type { AutoCompleteOption } from "./table-multi-select-types";
+import type { DropdownOption } from "./table-multi-select-types";
 
 interface UseTableMultiSelectSearchResult {
-  options: AutoCompleteOption[];
+  options: DropdownOption[];
   loading: boolean;
   highlightedIndex: number;
   search: string;
   isSelectingRef: React.MutableRefObject<boolean>;
   hasFetchedOnceRef: React.MutableRefObject<boolean>;
   performSearch: (searchTerm: string, limit: number, append?: boolean) => Promise<void>;
-  setOptions: React.Dispatch<React.SetStateAction<AutoCompleteOption[]>>;
+  setOptions: React.Dispatch<React.SetStateAction<DropdownOption[]>>;
   setSearch: React.Dispatch<React.SetStateAction<string>>;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
   setHighlightedIndex: React.Dispatch<React.SetStateAction<number>>;
@@ -47,7 +47,7 @@ export function useTableMultiSelectSearch(
   debounceDelay: number = 300,
   pageLength: number = 20,
 ): UseTableMultiSelectSearchResult {
-  const [options, setOptions] = useState<AutoCompleteOption[]>([]);
+  const [options, setOptions] = useState<DropdownOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(-1);

@@ -309,9 +309,9 @@
    "options": "Letter Head"
   },
   {
+   "default": "0",
    "fetch_from": "entitlement_voucher.group_same_items",
    "fetch_if_empty": 1,
-   "default": "0",
    "fieldname": "group_same_items",
    "fieldtype": "Check",
    "label": "Group same items"
@@ -489,7 +489,7 @@
    "link_fieldname": "entitlement_redemption"
   }
  ],
- "modified": "2026-07-17 21:00:00.000000",
+ "modified": "2026-07-24 09:24:48.468017",
  "modified_by": "Administrator",
  "module": "NPPOS",
  "name": "Entitlement Redemption",
@@ -497,6 +497,7 @@
  "owner": "Administrator",
  "permissions": [
   {
+   "cancel": 1,
    "create": 1,
    "delete": 1,
    "email": 1,
@@ -508,6 +509,29 @@
    "share": 1,
    "submit": 1,
    "write": 1
+  },
+  {
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Non Profit Agent",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Non Profit Portal User",
+   "share": 1
   }
  ],
  "row_format": "Dynamic",

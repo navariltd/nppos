@@ -9,7 +9,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
-import type { AutoCompleteOption } from "./table-multi-select-types";
+import type { DropdownOption } from "./table-multi-select-types";
 
 interface TableMultiSelectDropdownProps {
   /** Whether the dropdown is open. */
@@ -19,7 +19,7 @@ interface TableMultiSelectDropdownProps {
   /** Whether a link field exists. */
   hasLinkField: boolean;
   /** Options to display. */
-  options: AutoCompleteOption[];
+  options: DropdownOption[];
   /** Currently selected values. */
   value: string[];
   /** The search input value. */
@@ -41,7 +41,7 @@ interface TableMultiSelectDropdownProps {
   /** The doctype metadata (for subtitle info). */
   docMeta: any;
   /** Selection handler. */
-  onSelect: (opt: AutoCompleteOption) => void;
+  onSelect: (opt: DropdownOption) => void;
   /** Input change handler. */
   onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   /** Key down handler. */
@@ -51,7 +51,7 @@ interface TableMultiSelectDropdownProps {
 }
 
 /** Build subtitle lines for an option. */
-function getSubtitles(opt: AutoCompleteOption, docMeta: any): string[] {
+function getSubtitles(opt: DropdownOption, docMeta: any): string[] {
   const subtitles: string[] = [];
 
   if (docMeta) {

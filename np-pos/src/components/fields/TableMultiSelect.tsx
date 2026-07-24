@@ -1,5 +1,5 @@
 /**
- * TableMultiSelect – multi-select autocomplete dropdown for Frappe Link fields.
+ * TableMultiSelect – multi-select dropdown for Frappe Link fields.
  *
  * Key dependencies: uses frappe-service for API calls, renders via TableMultiSelectDropdown.
  * Fetches doctype metadata to find the first Link field, then searches link doctype values.
@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { TableMultiSelectDropdown } from "./TableMultiSelectDropdown";
 import { useTableMultiSelectMeta } from "./use-table-multi-select-meta";
 import { useTableMultiSelectSearch } from "./use-table-multi-select-search";
-import type { AutoCompleteOption, TableMultiSelectProps } from "./table-multi-select-types";
+import type { DropdownOption, TableMultiSelectProps } from "./table-multi-select-types";
 
 export const TableMultiSelect = ({
   doctype,
@@ -63,7 +63,7 @@ export const TableMultiSelect = ({
           txt: "", doctype: linkDoctype, page_length: value.length,
           filters: JSON.stringify({ name: ["in", value] }),
         });
-        const results: AutoCompleteOption[] = ((response as any)?.message || []).map((opt: any) => ({
+        const results: DropdownOption[] = ((response as any)?.message || []).map((opt: any) => ({
           label: opt.label || opt.value, value: opt.value, description: opt.description || "",
         }));
         setSelectedDisplayValues(value.map((v) => {
@@ -125,7 +125,7 @@ export const TableMultiSelect = ({
     }
   }, [isOpen]);
 
-  const handleSelect = React.useCallback((opt: AutoCompleteOption) => {
+  const handleSelect = React.useCallback((opt: DropdownOption) => {
     isSelectingRef.current = true;
     const newValue = value.includes(opt.value) ? value.filter((v) => v !== opt.value) : [...value, opt.value];
     const newDisplay = value.includes(opt.value)

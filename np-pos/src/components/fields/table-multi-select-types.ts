@@ -1,13 +1,13 @@
 /**
  * TableMultiSelectTypes – shared types for the TableMultiSelect component.
  *
- * Key dependencies: used by TableMultiSelect to define autocomplete option shapes.
+ * Key dependencies: used by TableMultiSelect to define dropdown option shapes.
  */
 
 import type * as React from "react";
 
-/** A single option in the autocomplete dropdown. */
-export interface AutoCompleteOption {
+/** A single option in the dropdown. */
+export interface DropdownOption {
   label: string;
   value: string;
   extra?: any;
