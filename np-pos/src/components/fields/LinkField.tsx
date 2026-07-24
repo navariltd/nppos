@@ -6,7 +6,7 @@ import { Check, ChevronDown, Loader2, Search, X } from "lucide-react";
 import * as React from "react";
 import { createPortal } from "react-dom";
 
-export interface AutoCompleteOption {
+export interface DropdownOption {
   label: string;
   value: string;
   extra?: any;
@@ -19,7 +19,7 @@ export interface AutoCompleteOption {
 interface LinkFieldProps {
   doctype: string;
   value: string;
-  onChange: (val: string, option?: AutoCompleteOption) => void;
+  onChange: (val: string, option?: DropdownOption) => void;
   onBlur?: () => void;
   placeholder?: string;
   className?: string;
@@ -55,7 +55,7 @@ export const LinkField = ({
 }: LinkFieldProps) => {
   const [isOpen, setIsOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
-  const [options, setOptions] = React.useState<AutoCompleteOption[]>([]);
+  const [options, setOptions] = React.useState<DropdownOption[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [dropdownPosition, setDropdownPosition] = React.useState<
     "top" | "bottom"
@@ -291,7 +291,7 @@ export const LinkField = ({
   }, [isOpen]);
 
   const handleSelect = React.useCallback(
-    (opt: AutoCompleteOption) => {
+    (opt: DropdownOption) => {
       isSelectingRef.current = true;
       onChange(opt.value, opt);
       setIsOpen(false);
@@ -353,7 +353,7 @@ export const LinkField = ({
     [isOpen, options, highlightedIndex, handleSelect, handleOpen],
   );
 
-  const getSubtitles = (opt: AutoCompleteOption) => {
+  const getSubtitles = (opt: DropdownOption) => {
     const subtitles: string[] = [];
 
     if (docMeta) {
