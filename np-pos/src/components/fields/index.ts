@@ -7,7 +7,6 @@ export {
 } from "./FrappeField";
 
 // Individual field components
-export { AutoComplete } from "./AutoComplete";
 export { Barcode } from "./Barcode";
 export { ButtonField as Button } from "./Button";
 export { Check } from "./Check";
