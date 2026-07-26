@@ -86,7 +86,8 @@ required_apps = ["erpnext"]
 # ------------
 
 # before_install = "nppos.install.before_install"
-# after_install = "nppos.install.after_install"
+after_install = "nppos.install.after_migrate"
+after_migrate = "nppos.install.after_migrate"
 
 # Uninstallation
 # ------------
