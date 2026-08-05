@@ -253,8 +253,13 @@
   {
    "fieldname": "agent",
    "fieldtype": "Link",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "in_preview": 1,
+   "in_standard_filter": 1,
    "label": "Agent",
-   "options": "Employee"
+   "options": "Employee",
+   "sticky": 1
   },
   {
    "fieldname": "column_break_iosy",
@@ -273,6 +278,10 @@
   {
    "fieldname": "warehouse",
    "fieldtype": "Link",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "in_preview": 1,
+   "in_standard_filter": 1,
    "label": "Warehouse",
    "options": "Warehouse"
   },
@@ -460,7 +469,7 @@
    "link_fieldname": "entitlement_voucher"
   }
  ],
- "modified": "2026-07-21 06:12:52.651528",
+ "modified": "2026-08-05 14:20:47.549451",
  "modified_by": "Administrator",
  "module": "NPPOS",
  "name": "Entitlement Voucher",
