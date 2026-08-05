@@ -87,7 +87,7 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
     profileName
       ? { doctype: "POS Profile", name: profileName }
       : {},
-    profileName ? `pos-profile-${profileName}` : undefined as string | undefined,
+    profileName ? `pos-profile-${profileName}` : null,
   );
 
   // Sync the fetched profile into state + cache

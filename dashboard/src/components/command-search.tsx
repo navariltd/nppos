@@ -91,11 +91,11 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
 
   // Fetch allowed doctypes from Global Search Settings
   const { data: settingsData } = useFrappeGetCall(
-    open ? "frappe.client.get" : null,
+    open ? "frappe.client.get" : (null as any),
     open
       ? { doctype: "Global Search Settings", name: "Global Search Settings" }
       : {},
-    open ? "global-search-settings" : undefined as string | undefined,
+    open ? "global-search-settings" : null,
   );
 
   React.useEffect(() => {
@@ -118,11 +118,11 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
   }
 
   const { data: searchResponse, isValidating: isSearching } = useFrappeGetCall(
-    shouldSearch ? "frappe.utils.global_search.search" : null,
+    shouldSearch ? "frappe.utils.global_search.search" : (null as any),
     searchParams,
     shouldSearch
       ? `awesomebar-${selectedDocType}-${queryTerm}-${start}-${limit}`
-      : undefined as string | undefined,
+      : null,
   );
 
   React.useEffect(() => {
