@@ -35,8 +35,11 @@ export function TagSection({
   );
   const shouldFetchTags = isTagInputOpen && currentDoctype;
   const { data: suggestionData } = useFrappeGetCall(
-    shouldFetchTags ? ("frappe.desk.doctype.tag.tag.get_tags" as const) : null,
+    shouldFetchTags
+      ? ("frappe.desk.doctype.tag.tag.get_tags" as const)
+      : (null as any),
     shouldFetchTags ? ({ doctype: currentDoctype, txt: "" } as any) : null,
+    shouldFetchTags ? `tag-suggestions-${currentDoctype}` : null,
   );
 
   useEffect(() => {
