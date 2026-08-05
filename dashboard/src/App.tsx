@@ -16,12 +16,22 @@ import { BrowserRouter as Router } from "react-router-dom";
 
 const basename = "nppos";
 
+/**
+ * Read the persisted sidebar open-state from the `sidebar_state` cookie.
+ *
+ * @returns {boolean} whether the sidebar should start open
+ */
 function getInitialSidebarOpen(): boolean {
   if (typeof document === "undefined") return false;
   const match = document.cookie.match(/(?:^|;\s*)sidebar_state=([^;]*)/);
   return match ? match[1] === "true" : false;
 }
 
+/**
+ * Root component wrapping all providers and the router.
+ *
+ * @returns {JSX.Element} the fully composed application
+ */
 function App() {
   return (
     <div

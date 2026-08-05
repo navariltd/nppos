@@ -1,9 +1,13 @@
-/** Application route configuration with lazy-loaded pages and role-protected routes. */
-
+/**
+ * Application route configuration with lazy-loaded pages and role-protected
+ * routes. The root AppLayout stays mounted across navigations so the sidebar
+ * never reloads; POS pages are wrapped in POSLayout (opening-entry checks +
+ * auth guards) and dynamic doctype pages are gated by OnlineOnly.
+ */
 import { lazy } from "react";
+import { Navigate, Outlet } from "react-router-dom";
 
 import UsersPage from "@/app/users/page";
-import { Navigate, Outlet } from "react-router-dom";
 
 const SignIn = lazy(() => import("@/app/auth/sign-in/page"));
 const SignUp = lazy(() => import("@/app/auth/sign-up/page"));
@@ -24,6 +28,7 @@ const GoodsHampers = lazy(() => import("@/app/pos/goods-hampers/page"));
 const SearchVoucher = lazy(() => import("@/app/pos/search/page"));
 const IssueEntitlement = lazy(() => import("@/app/pos/issue-entitlement/page"));
 const ClosingEntry = lazy(() => import("@/app/pos/closing-entry/page"));
+const StockBalance = lazy(() => import("@/app/pos/stock-balance/page"));
 const Playground = lazy(() => import("@/app/pos/playground/page"));
 
 // Dynamic doctype pages (generic list/detail for doctypes)
@@ -37,6 +42,7 @@ const NotificationSettings = lazy(
 
 import { AppLayout } from "@/components/layouts/app-layout";
 import { POSLayout } from "@/components/layouts/pos-layout";
+import OnlineOnly from "@/components/offline/OnlineOnly";
 import { RoleProtectedRoute } from "@/app/auth/role-protected-route";
 
 export interface RouteConfig {
@@ -80,6 +86,7 @@ export const routes: RouteConfig[] = [
           { path: "search", element: <SearchVoucher /> },
           { path: "issue-entitlement", element: <IssueEntitlement /> },
           { path: "closing-entry", element: <ClosingEntry /> },
+          { path: "stock-balance", element: <StockBalance /> },
           { path: "playground", element: <Playground /> },
         ],
       },
@@ -87,11 +94,19 @@ export const routes: RouteConfig[] = [
       // e.g. /app/pos-closing-entry or /app/pos-closing-entry/SAL-2024-00001
       {
         path: "app/:doctype",
-        element: <DocTypeListPage />,
+        element: (
+          <OnlineOnly>
+            <DocTypeListPage />
+          </OnlineOnly>
+        ),
       },
       {
         path: "app/:doctype/:id",
-        element: <DocTypeFormPage />,
+        element: (
+          <OnlineOnly>
+            <DocTypeFormPage />
+          </OnlineOnly>
+        ),
       },
       {
         path: "users",
