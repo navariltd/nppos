@@ -19,6 +19,7 @@ import { useOffline } from "@/contexts/offline-context";
 import { usePOS } from "@/contexts/pos-context";
 import { redemptionRepo, voucherRepo } from "@/lib/offline/repository";
 import type { OfflineRedemption, OfflineVoucher } from "@/lib/offline/db";
+import CameraScanner from "./components/CameraScanner";
 import SearchBar from "./components/SearchBar";
 import VoucherDetails from "./components/VoucherDetails";
 import VoucherList from "./components/VoucherList";
@@ -205,6 +206,20 @@ export default function SearchVoucher() {
     setSearchParams(params, { replace: true });
   };
 
+  // Trigger a search directly from a camera-scanned value.
+  const handleScan = (value: string) => {
+    setSearchQuery(value);
+    setSearchedQuery(value);
+    setSelectedVoucher(null);
+    const params = new URLSearchParams();
+    if (searchMode === "voucher") {
+      params.set("voucher", value);
+    } else {
+      params.set("bene", value);
+    }
+    setSearchParams(params, { replace: true });
+  };
+
   const isLoading = localLoading;
 
   return (
@@ -219,6 +234,9 @@ export default function SearchVoucher() {
         warehouse={defaultWarehouse}
         inputRef={inputRef}
       />
+
+      {/* Always-on camera scanner below the search inputs */}
+      <CameraScanner onScan={handleScan} disabled={isLoading} />
 
       {!isOnline && q && (
         <Card className="border-amber-500/40 bg-amber-500/5">
