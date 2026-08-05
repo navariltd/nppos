@@ -6,22 +6,20 @@
 			name="viewport"
 			content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no"
 		/>
-		<title>NPPOS | Humanitarian & Social Assistance Distribution Portal</title>
+		<title>{{ app_name }}</title>
 		<meta
 			name="description"
 			content="Plan, manage, and track humanitarian assistance distributions. End-to-end workflows for voucher generation, hamper manufacturing, inventory management, and POS-based distributions."
 		/>
-
-		<!-- Favicons -->
-		<link rel="icon" type="image/png" href="/assets/nppos/logo.png" />
-		<link rel="apple-touch-icon" href="/assets/nppos/logo.png" />
-
-		<!-- Theme colors -->
+		<link rel="apple-touch-icon" sizes="180x180" href="{{ apple_touch_icon }}" />
+		<link rel="icon" type="image/png" href="{{ icon_96 }}" sizes="96x96" />
+		<link rel="icon" type="image/svg+xml" href="{{ favicon_svg }}" />
+		<link rel="shortcut icon" href="{{ favicon_ico }}" />
 		<meta name="msapplication-TileColor" content="#000000" />
 		<meta name="theme-color" content="#191919" />
-
-		<!-- iOS / PWA support -->
+		<link rel="mask-icon" href="{{ mask_icon }}" color="#000000" />
 		<meta name="apple-itunes-app" content="app-id=6741682327, app-argument={{sitename}}" />
+
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-title" content="{{ app_name }}" />
 		<meta name="apple-touch-fullscreen" content="yes" />
@@ -38,11 +36,9 @@
 			if (!window.frappe) window.frappe = {};
 			window.app_name = "{{ app_name }}";
 
-			// Boot data from Frappe backend
 			frappe.boot = JSON.parse({{ boot }});
 		</script>
 
-		<!-- React entry point -->
 		<script type="module" src="/src/main.jsx"></script>
 	</body>
 </html>

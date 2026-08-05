@@ -55,4 +55,4 @@ jspm_packages/
 .aider*
 
 # Build outputs
-nppos/public/np-pos
+nppos/public/nppos

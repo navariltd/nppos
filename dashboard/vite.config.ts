@@ -19,7 +19,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "../nppos/public/np-pos",
+    outDir: "../nppos/public/nppos",
     emptyOutDir: true,
     target: "es2015",
   },

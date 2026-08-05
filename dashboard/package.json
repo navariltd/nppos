@@ -1,14 +1,14 @@
 {
-  "name": "np-pos",
+  "name": "dashboard",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build --base=/assets/nppos/np-pos/ && yarn copy-html-entry",
+    "build": "vite build --base=/assets/nppos/nppos/ && yarn copy-html-entry",
     "lint": "oxlint",
     "preview": "vite preview",
-    "copy-html-entry": "cp ../nppos/public/np-pos/index.html ../nppos/www/np-pos.html"
+    "copy-html-entry": "cp ../nppos/public/nppos/index.html ../nppos/www/nppos.html"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
