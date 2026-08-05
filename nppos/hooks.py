@@ -263,4 +263,6 @@ accounting_dimension_doctypes = [
 	"Entitlement Redemption",
 ]
 
-website_route_rules = [{'from_route': '/np-pos/<path:app_path>', 'to_route': 'np-pos'},]
+website_route_rules = [
+	{"from_route": "/nppos/<path:app_path>", "to_route": "nppos"},
+]
