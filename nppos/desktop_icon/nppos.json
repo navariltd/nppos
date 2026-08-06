@@ -1,0 +1,22 @@
+{
+ "app": "nppos",
+ "bg_color": "gray",
+ "creation": "2026-08-05 14:09:59.599030",
+ "docstatus": 0,
+ "doctype": "Desktop Icon",
+ "hidden": 0,
+ "icon_type": "Link",
+ "idx": 0,
+ "label": "NPPOS",
+ "link": "/nppos",
+ "link_to": "",
+ "link_type": "External",
+ "logo_url": "/assets/nppos/logo.png",
+ "modified": "2026-08-05 14:11:46.893269",
+ "modified_by": "Administrator",
+ "name": "NPPOS",
+ "owner": "Administrator",
+ "restrict_removal": 0,
+ "roles": [],
+ "standard": 1
+}

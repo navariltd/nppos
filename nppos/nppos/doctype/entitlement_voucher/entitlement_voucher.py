@@ -16,7 +16,13 @@ class EntitlementVoucher(Document):
 		self.generate_qr_code()
 
 	def generate_qr_code(self):
-		"""Auto-generate QR code image and save to the image field."""
+		"""Auto-generate QR code image and save to the image field.
+
+		Runs on save/submit/update, but skips any voucher that already has an
+		image (only ``qrcode``/PIL-generated images are created here). Failures
+		— including a missing ``qrcode`` dependency — are logged via
+		``frappe.log_error`` with a title and message.
+		"""
 		if not self.voucher_number or not self.name or self.image:
 			return
 
@@ -48,8 +54,7 @@ class EntitlementVoucher(Document):
 					)
 					old_file.delete(ignore_permissions=True)
 				except frappe.DoesNotExistError:
-					pass
-				except Exception:
+					# No previous QR file to replace.
 					pass
 
 			_file = frappe.get_doc(
@@ -66,10 +71,13 @@ class EntitlementVoucher(Document):
 
 			self.db_set("image", _file.file_url, commit=False)
 
-		except ImportError:
-			pass
-		except Exception:
+		except ImportError as e:
 			frappe.log_error(
 				title="Entitlement Voucher QR Generation",
-				message=f"Failed to generate QR code for {self.name}",
+				message=f"Missing QR dependency for {self.name}: {e}",
+			)
+		except Exception as e:
+			frappe.log_error(
+				title="Entitlement Voucher QR Generation",
+				message=f"Failed to generate QR code for {self.name}: {e}",
 			)
