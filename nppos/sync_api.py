@@ -507,13 +507,10 @@ def _auto_close_orphan(opening_name):
         doc.insert(ignore_permissions=True)
         doc.submit()  # on_submit flips the opening to "Closed"
     except Exception:
-        # Couldn't close cleanly — cancel (last resort) so it stops blocking.
-        try:
-            o = frappe.get_doc("POS Opening Entry", opening_name)
-            o.flags.ignore_permissions = True
-            o.cancel()
-        except Exception:
-            frappe.db.set_value("POS Opening Entry", opening_name, "status", "Closed")
+        # NEVER cancel a real opening — that destroys the shift's audit trail.
+        # If a clean close fails, just force the status to Closed so it stops
+        # blocking new openings while staying on record as a completed shift.
+        frappe.db.set_value("POS Opening Entry", opening_name, "status", "Closed")
 
 
 def _push_pos_opening(client_ref, created_at, payload):
@@ -576,13 +573,13 @@ def _push_pos_closing(client_ref, created_at, payload):
         },
     )
     doc.insert(ignore_permissions=True)
-    # A disbursement POS has no POS Invoices to fold in, so submit usually works;
-    # if core validation refuses, keep the counted numbers as a draft.
-    try:
-        doc.submit()
-    except frappe.ValidationError:
-        frappe.db.rollback(save_point="push")
-        doc = frappe.get_doc("POS Closing Entry", doc.name)  # re-read draft
+    # A disbursement POS has no POS Invoices to fold in, so submit should work.
+    # Do NOT swallow a submit failure here: the previous version rolled back to
+    # the "push" savepoint (which also undid the insert) and then re-read the
+    # now-deleted doc, raising DoesNotExistError and masking the real cause with
+    # a bogus "not found". Let any ValidationError bubble to sync_push, which
+    # turns it into a proper "rejected" carrying the actual reason.
+    doc.submit()
     return _accepted(doc.name)
 
 
