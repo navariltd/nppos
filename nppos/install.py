@@ -1,10 +1,9 @@
 """Schema customisations installed for the NPPOS offline sync flow.
 
-Idempotently creates the sync-tracking fields on Entitlement Redemption — the
-voucher flow's primary business document: ``client_ref`` (unique idempotency
-key carried by every pushed redemption) and ``sync_status`` (push state
-tracker). No sync-tracking fields are installed on Stock Entry, POS Opening
-Entry or POS Closing Entry.
+Idempotently creates the sync-tracking fields on every document a push creates:
+``client_ref`` (the client-generated idempotency key) and, on Entitlement
+Redemption — the voucher flow's primary business document — ``sync_status``
+(push state tracker).
 """
 
 import frappe
@@ -49,7 +48,8 @@ def after_migrate():
             "Entitlement Redemption": [
                 _client_ref_field("amended_from"),
                 _sync_status_field("client_ref"),
-            ]
+            ],
+            "Stock Entry": [_client_ref_field("amended_from")],
         },
         ignore_validate=True,
     )

@@ -140,6 +140,7 @@ def _vouchers(voucher_names, warehouses, redeemed, project_to_ada):
                 "amount",
                 "project",
                 "party",
+                "image",
             ],
         )
         if voucher_names
@@ -175,6 +176,7 @@ def _vouchers(voucher_names, warehouses, redeemed, project_to_ada):
                 "max_uses": 2,  # spec-level local rule; no backend counter yet
                 "project": v.project or "",
                 "assignment_id": project_to_ada.get(v.project),
+                "image": v.image or None,
                 "doc": full_doc,  # full Entitlement Voucher document
             }
         )

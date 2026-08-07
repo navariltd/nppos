@@ -40,8 +40,8 @@ def default_company():
 def existing(doctype, client_ref):
     """Name of a doc already created for this client_ref (idempotency), or None.
 
-    Only Entitlement Redemption carries the plain ``client_ref`` unique field;
-    other doctypes are not idempotency-keyed.
+    Every doctype a push creates carries the unique ``client_ref`` field (see
+    ``nppos/install.py``), so this works for all of them.
     """
     if not client_ref:
         return None

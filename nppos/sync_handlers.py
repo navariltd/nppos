@@ -1,10 +1,8 @@
 """Push handlers for the NPPOS offline sync API.
 
 Each handler applies a single queued business transaction from the device
-outbox. Entitlement Redemptions are idempotent on the plain ``client_ref``
-field (the unique idempotency key installed on that doctype only); the other
-documents (POS Opening/Closing, Stock Entry) carry no idempotency key and are
-created fresh on each accepted push.
+outbox, and every handler is safe to call twice — the device re-pushes the same
+row whenever a response is lost after the server already committed.
 """
 
 import frappe
@@ -64,17 +62,30 @@ def _auto_close_orphan(opening_name):
         doc.insert(ignore_permissions=True)
         doc.submit()  # on_submit flips the opening to "Closed"
     except Exception:
-        # Couldn't close cleanly — cancel (last resort) so it stops blocking.
-        try:
-            o = frappe.get_doc("POS Opening Entry", opening_name)
-            o.flags.ignore_permissions = True
-            o.cancel()
-        except Exception:
-            frappe.db.set_value("POS Opening Entry", opening_name, "status", "Closed")
+        # NEVER cancel a real opening — that destroys the shift's audit trail.
+        frappe.db.set_value("POS Opening Entry", opening_name, "status", "Closed")
+
+
+def _opening_from_same_push(payload, created_at):
+    """The POS Opening Entry this exact push already created, or None."""
+    return frappe.db.get_value(
+        "POS Opening Entry",
+        {
+            "pos_profile": payload["posProfile"],
+            "user": frappe.session.user,
+            "period_start_date": server_dt(created_at),
+            "docstatus": 1,
+        },
+        "name",
+    )
 
 
 def push_pos_opening(client_ref, created_at, payload):
-    """Create + submit a POS Opening Entry from the device (not idempotent)."""
+    """Create + submit a POS Opening Entry from the device. Return the entry it already created on a retry."""
+    already = _opening_from_same_push(payload, created_at)
+    if already:
+        return accepted(already)
+
     profile_name = payload["posProfile"]
     pos_profile = frappe.get_doc("POS Profile", profile_name)
     _close_stale_openings(profile_name, frappe.session.user)
@@ -97,11 +108,20 @@ def push_pos_opening(client_ref, created_at, payload):
 
 
 def push_pos_closing(client_ref, created_at, payload):
-    """Create + submit a POS Closing Entry from the device (not idempotent)."""
+    """Create + submit a POS Closing Entry from the device. Return the entry it already created on a retry."""
     session = payload.get("session")
     opening_name = frappe.db.get_value("POS Opening Entry", session, "name")
     if not opening_name:
         return rejected(_("Opening entry not found for this session."))
+
+    already = frappe.db.get_value(
+        "POS Closing Entry",
+        {"pos_opening_entry": opening_name, "docstatus": 1},
+        "name",
+    )
+    if already:
+        return accepted(already)
+
     opening = frappe.get_doc("POS Opening Entry", opening_name)
 
     doc = frappe.new_doc("POS Closing Entry")
@@ -123,13 +143,7 @@ def push_pos_closing(client_ref, created_at, payload):
         },
     )
     doc.insert(ignore_permissions=True)
-    # A disbursement POS has no POS Invoices to fold in, so submit usually works;
-    # if core validation refuses, keep the counted numbers as a draft.
-    try:
-        doc.submit()
-    except frappe.ValidationError:
-        frappe.db.rollback(save_point="push")
-        doc = frappe.get_doc("POS Closing Entry", doc.name)  # re-read draft
+    doc.submit()
     return accepted(doc.name)
 
 
@@ -178,8 +192,8 @@ def _redeem_voucher(client_ref, payload, entitlement_type):
     if entitlement_type == "Goods" and payload.get("warehouse"):
         red.warehouse = payload["warehouse"]
     if payload.get("posSession"):
-        # The web app sends the opening doc name; the mobile app sends the
-        # client_ref (session id) which is the opening doc name or its client_ref.
+        # Both apps send the POS Opening Entry's document name (the device
+        # resolves its local session id before pushing).
         pos_profile_name = frappe.db.get_value(
             "POS Opening Entry", payload["posSession"], "pos_profile"
         )
@@ -220,10 +234,15 @@ def push_goods_issue(client_ref, created_at, payload):
 
 
 def push_stock_adjustment(client_ref, created_at, payload):
-    """Create + submit a Material Issue Stock Entry (not idempotent)."""
+    """Idempotently create + submit a Material Issue Stock Entry."""
+    existing_doc = existing("Stock Entry", client_ref)
+    if existing_doc:
+        return accepted(existing_doc)
+
     se = frappe.new_doc("Stock Entry")
     se.stock_entry_type = "Material Issue"
     se.company = default_company()
+    se.client_ref = client_ref
     se.append(
         "items",
         {
@@ -248,4 +267,3 @@ HANDLERS = {
     "stock_return": push_stock_adjustment,
     "stock_damaged": push_stock_adjustment,
 }
-
