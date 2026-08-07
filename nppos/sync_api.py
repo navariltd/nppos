@@ -5,12 +5,12 @@
   POST /api/method/nppos.sync_api.sync_push   {client_ref, created_at, payload}
 
 Design notes:
-  * Redemption idempotency is load-bearing. Every Entitlement Redemption a push
-    creates carries client_ref == client_ref (a unique Data field installed by
-    nppos/install.py on Entitlement Redemption — the voucher flow's primary
-    document). A re-push of the same client_ref returns the existing redemption
-    instead of creating a duplicate, so device retries after a mid-sync drop are
-    safe. POS Opening/Closing and Stock Entries are not idempotency-keyed.
+  * Idempotency is load-bearing — a lost response makes the device re-push the
+    same row. Entitlement Redemption and Stock Entry carry the device's
+    client_ref in a unique Data field (nppos/install.py) and a re-push returns
+    the existing document. POS Opening/Closing Entry need no field: the shift is
+    its own key (one cashier + profile + start time → one opening; one opening →
+    one closing). See sync_handlers for both paths.
   * A push returns exactly one of {"status": "accepted", ...} or
     {"status": "rejected", "reason": ...} (both HTTP 200). Business refusals
     become "rejected"; transient/unexpected errors bubble as 5xx so the device
