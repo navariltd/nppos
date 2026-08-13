@@ -139,13 +139,11 @@ after_migrate = "nppos.install.after_migrate"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"POS Closing Entry": {
+		"validate": "nppos.overrides.pos_closing_entry.validate",
+	},
+}
 
 # Scheduled Tasks
 # ---------------
