@@ -11,6 +11,7 @@
   "entitlement_voucher",
   "entitlement_type",
   "pos_profile",
+  "pos_opening_entry",
   "column_break_riym",
   "company",
   "party_type",
@@ -28,6 +29,7 @@
   "warehouse",
   "entitlement_section",
   "item",
+  "bom",
   "currency",
   "column_break_jrjo",
   "uom",
@@ -474,6 +476,26 @@
    "fieldtype": "Currency",
    "label": "Rate",
    "mandatory_depends_on": "eval: doc.entitlement_type == \"Cash\""
+  },
+  {
+   "fieldname": "pos_opening_entry",
+   "fieldtype": "Link",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "in_preview": 1,
+   "in_standard_filter": 1,
+   "label": "POS Opening Entry",
+   "options": "POS Opening Entry"
+  },
+  {
+   "depends_on": "eval: doc.entitlement_type == \"Goods\"",
+   "fetch_from": "entitlement_voucher.bom",
+   "fetch_if_empty": 1,
+   "fieldname": "bom",
+   "fieldtype": "Link",
+   "label": "BOM",
+   "mandatory_depends_on": "eval: doc.entitlement_type == \"Goods\"",
+   "options": "BOM"
   }
  ],
  "grid_page_length": 50,
@@ -489,7 +511,7 @@
    "link_fieldname": "entitlement_redemption"
   }
  ],
- "modified": "2026-07-24 09:24:48.468017",
+ "modified": "2026-08-12 12:17:38.912052",
  "modified_by": "Administrator",
  "module": "NPPOS",
  "name": "Entitlement Redemption",
