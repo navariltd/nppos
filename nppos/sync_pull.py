@@ -30,19 +30,25 @@ def _voucher_status(v, is_goods, agg):
     return "active"
 
 
+def _default_bom(item_code):
+    """The item's default active BOM, or None."""
+    return frappe.db.get_value(
+        "BOM", {"item": item_code, "is_default": 1, "is_active": 1}, "name"
+    )
+
+
 def _hamper_for(item_code):
     """Represent an item as a hamper. If it has a default BOM, expand its
     components; otherwise it's a single-line hamper (the item itself)."""
     item_name = frappe.db.get_value("Item", item_code, "item_name") or item_code
-    bom = frappe.db.get_value(
-        "BOM", {"item": item_code, "is_default": 1, "is_active": 1}, "name"
-    )
+    bom = _default_bom(item_code)
     items = []
     if bom:
         for bi in frappe.get_all(
             "BOM Item",
             filters={"parent": bom},
             fields=["item_name", "stock_uom", "qty"],
+            order_by="idx",
         ):
             items.append(
                 {
@@ -53,7 +59,82 @@ def _hamper_for(item_code):
             )
     if not items:
         items = [{"item_name": item_name, "unit": "", "qty_per_household": 1}]
-    return {"id": item_code, "name": item_name, "items": items}
+    return {"id": item_code, "name": item_name, "items": items, "bom_id": bom}
+
+
+def _bom_payload(bom_name):
+    """A BOM and its components, as the device stores them.
+
+    The voucher now names its own BOM (Entitlement Voucher.bom), so the hamper
+    an agent hands over is the BOM's component list — NOT necessarily the item's
+    default BOM. `quantity` is what the component quantities are stated per (a
+    BOM that yields 1 hamper has quantity 1).
+    """
+    bom = frappe.db.get_value(
+        "BOM", bom_name, ["name", "item", "item_name", "quantity", "uom"], as_dict=True
+    )
+    if not bom:
+        return None
+    items = frappe.get_all(
+        "BOM Item",
+        filters={"parent": bom.name},
+        fields=["item_code", "item_name", "uom", "stock_uom", "qty"],
+        order_by="idx",
+    )
+    return {
+        "id": bom.name,
+        "item_code": bom.item,
+        "item_name": bom.item_name or bom.item,
+        "quantity": bom.quantity or 1,
+        "uom": bom.uom or "",
+        "items": [
+            {
+                "item_code": i.item_code,
+                "item_name": i.item_name or i.item_code,
+                "unit": i.uom or i.stock_uom or "",
+                "qty": i.qty or 0,
+            }
+            for i in items
+        ],
+    }
+
+
+def _beneficiaries(party_names):
+    """The Beneficiary records behind the vouchers being returned.
+
+    Agents need enough to confirm they're facing the right person at issue time
+    (name, ID number, status) — never the full case file. Beneficiary lives in
+    aigt_hdr, so a site without it simply gets an empty list.
+    """
+    if not party_names or not frappe.db.exists("DocType", "Beneficiary"):
+        return []
+    rows = frappe.get_all(
+        "Beneficiary",
+        filters={"name": ["in", list(party_names)]},
+        fields=[
+            "name",
+            "full_name",
+            "id_number",
+            "status",
+            "phone_number",
+            "household_size",
+            "beneficiary_type",
+            "district",
+        ],
+    )
+    return [
+        {
+            "id": r.name,
+            "full_name": r.full_name or r.name,
+            "id_number": r.id_number or None,
+            "status": r.status or None,
+            "phone": r.phone_number or None,
+            "household_size": r.household_size or 0,
+            "beneficiary_type": r.beneficiary_type or None,
+            "district": r.district or None,
+        }
+        for r in rows
+    ]
 
 
 def _assignments(employee, cursor):
@@ -134,11 +215,13 @@ def _vouchers(voucher_names, warehouses, redeemed, project_to_ada):
                 "valid_from",
                 "valid_to",
                 "item",
+                "bom",
                 "qty",
                 "uom",
                 "rate",
                 "amount",
                 "project",
+                "party_type",
                 "party",
                 "image",
             ],
@@ -147,6 +230,8 @@ def _vouchers(voucher_names, warehouses, redeemed, project_to_ada):
         else []
     )
     goods_item_codes = set()
+    bom_names = set()
+    party_names = set()
     vouchers = []
     for v in voucher_rows:
         is_goods = v.entitlement_type == "Goods"
@@ -164,6 +249,7 @@ def _vouchers(voucher_names, warehouses, redeemed, project_to_ada):
                 "entitlement_type": "hamper" if is_goods else "cash",
                 "amount": v.amount or 0,
                 "hamper_id": v.item if is_goods else None,
+                "bom_id": v.bom if is_goods else None,
                 "qty": v.qty if is_goods else None,
                 "uom": v.uom if is_goods else None,
                 "rate": v.rate if is_goods else None,
@@ -182,7 +268,11 @@ def _vouchers(voucher_names, warehouses, redeemed, project_to_ada):
         )
         if is_goods and v.item:
             goods_item_codes.add(v.item)
-    return vouchers, goods_item_codes
+        if is_goods and v.bom:
+            bom_names.add(v.bom)
+        if v.party and v.party_type == "Beneficiary":
+            party_names.add(v.party)
+    return vouchers, goods_item_codes, bom_names, party_names
 
 
 def _agent_stock(warehouses, goods_item_codes):
@@ -205,6 +295,7 @@ def _agent_stock(warehouses, goods_item_codes):
                         "Item", bin_row.item_code, "item_name"
                     )
                     or bin_row.item_code,
+                    "bom_id": _default_bom(bin_row.item_code),
                     "on_hand": bin_row.actual_qty or 0,
                     "issued_today": 0,
                     "damaged": 0,
@@ -234,9 +325,11 @@ def build_pull_payload(cursors=None):
     empty = {
         "assignments": [],
         "vouchers": [],
+        "boms": [],
         "hampers": [],
         "agent_stock": [],
         "pos_profiles": [],
+        "beneficiaries": [],
         "cursors": {k: stamp for k in COLLECTIONS},
     }
 
@@ -276,7 +369,7 @@ def build_pull_payload(cursors=None):
 
     # ---- redeemed totals + vouchers ----
     redeemed = _redeemed_totals(voucher_names, warehouses)
-    vouchers, goods_item_codes = _vouchers(
+    vouchers, goods_item_codes, bom_names, party_names = _vouchers(
         voucher_names, warehouses, redeemed, project_to_ada
     )
 
@@ -284,11 +377,20 @@ def build_pull_payload(cursors=None):
     hampers = [_hamper_for(code) for code in goods_item_codes]
     agent_stock = _agent_stock(warehouses, goods_item_codes)
 
+    # ---- BOMs (voucher-named + the stock items' defaults) ----
+    # Both are needed: a redemption shows the VOUCHER's BOM, the stock screen
+    # shows what a unit sitting in the warehouse contains.
+    bom_names |= {h["bom_id"] for h in hampers if h.get("bom_id")}
+    bom_names |= {s["bom_id"] for s in agent_stock if s.get("bom_id")}
+    boms = [b for b in (_bom_payload(n) for n in sorted(bom_names)) if b]
+
     return {
         "assignments": assignments,
         "vouchers": vouchers,
+        "boms": boms,
         "hampers": hampers,
         "agent_stock": agent_stock,
         "pos_profiles": pos_profiles,
+        "beneficiaries": _beneficiaries(party_names),
         "cursors": {k: stamp for k in COLLECTIONS},
     }
