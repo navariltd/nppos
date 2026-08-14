@@ -11,10 +11,14 @@ class EntitlementRedemption(Document):
 			self.posting_date = frappe.utils.nowdate()
 
 	def on_submit(self):
+		self.update_voucher_status_on_submit()
 		if self.entitlement_type == "Cash":
 			self.create_payment_entry()
 		elif self.entitlement_type == "Goods":
 			self.create_stock_entry()
+
+	def on_cancel(self):
+		self.update_voucher_status_on_cancel()
 
 	def get_common_fields(self, target_doctype):
 		common_fields = {}
@@ -29,6 +33,108 @@ class EntitlementRedemption(Document):
 					common_fields[fieldname] = value
 
 		return common_fields
+
+	def update_voucher_status_on_submit(self):
+		if not self.entitlement_voucher:
+			return
+
+		voucher_docstatus, voucher_status, voucher_qty, voucher_amount = frappe.db.get_value(
+			"Entitlement Voucher",
+			self.entitlement_voucher,
+			["docstatus", "status", "qty", "amount"],
+		)
+
+		if voucher_docstatus != 1:
+			frappe.throw(
+				f"Entitlement Voucher {self.entitlement_voucher} must be submitted before redemption."
+			)
+
+		if voucher_status in ["Redeemed", "Expired", "Cancelled"]:
+			frappe.throw(f"Entitlement Voucher {self.entitlement_voucher} is already {voucher_status}.")
+
+		redemptions = frappe.get_all(
+			"Entitlement Redemption",
+			filters={
+				"entitlement_voucher": self.entitlement_voucher,
+				"docstatus": 1,
+				"name": ["!=", self.name],
+			},
+			fields=["qty", "amount"],
+		)
+
+		if self.entitlement_type == "Goods":
+			total_redeemed = 0
+			for redemption in redemptions:
+				total_redeemed += redemption.qty or 0
+			total_redeemed += self.qty or 0
+
+			new_status = (
+				"Redeemed" if (voucher_qty and total_redeemed >= voucher_qty) else "Partially Redeemed"
+			)
+
+		elif self.entitlement_type == "Cash":
+			total_redeemed = 0
+			for redemption in redemptions:
+				total_redeemed += redemption.amount or 0
+			total_redeemed += self.amount or 0
+
+			new_status = (
+				"Redeemed" if (voucher_amount and total_redeemed >= voucher_amount) else "Partially Redeemed"
+			)
+
+		else:
+			return
+
+		frappe.db.set_value("Entitlement Voucher", self.entitlement_voucher, "status", new_status)
+
+	def update_voucher_status_on_cancel(self):
+		if not self.entitlement_voucher:
+			return
+
+		voucher_qty, voucher_amount = frappe.db.get_value(
+			"Entitlement Voucher",
+			self.entitlement_voucher,
+			["qty", "amount"],
+		)
+
+		redemptions = frappe.get_all(
+			"Entitlement Redemption",
+			filters={
+				"entitlement_voucher": self.entitlement_voucher,
+				"docstatus": 1,
+				"name": ["!=", self.name],
+			},
+			fields=["qty", "amount"],
+		)
+
+		if self.entitlement_type == "Goods":
+			total_redeemed = 0
+			for redemption in redemptions:
+				total_redeemed += redemption.qty or 0
+
+			if total_redeemed == 0:
+				new_status = "Active"
+			elif voucher_qty and total_redeemed < voucher_qty:
+				new_status = "Partially Redeemed"
+			else:
+				new_status = "Redeemed"
+
+		elif self.entitlement_type == "Cash":
+			total_redeemed = 0
+			for redemption in redemptions:
+				total_redeemed += redemption.amount or 0
+
+			if total_redeemed == 0:
+				new_status = "Active"
+			elif voucher_amount and total_redeemed < voucher_amount:
+				new_status = "Partially Redeemed"
+			else:
+				new_status = "Redeemed"
+
+		else:
+			return
+
+		frappe.db.set_value("Entitlement Voucher", self.entitlement_voucher, "status", new_status)
 
 	def create_payment_entry(self):
 		if not self.party:
@@ -75,6 +181,7 @@ class EntitlementRedemption(Document):
 				"reference_no": self.name,
 				"reference_date": self.posting_date,
 				"entitlement_redemption": self.name,
+				"entitlement_voucher": self.entitlement_voucher,
 				"remarks": f"Entitlement Redemption: {self.entitlement_voucher} - {self.description or ''}",
 			}
 		)
@@ -114,6 +221,7 @@ class EntitlementRedemption(Document):
 			{
 				"stock_entry_type": "Material Issue",
 				"entitlement_redemption": self.name,
+				"entitlement_voucher": self.entitlement_voucher,
 				"remarks": f"Entitlement Redemption: {self.entitlement_voucher} - {self.description or ''}",
 			}
 		)
