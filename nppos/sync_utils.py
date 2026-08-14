@@ -15,7 +15,15 @@ ADMIN_ROLES = {"System Manager", "Non Profit Admin"}
 
 # Wire keys the device expects on `cursors` (camelCase — the app maps arrays
 # snake→camel itself but passes `cursors` through untouched).
-COLLECTIONS = ["assignments", "vouchers", "hampers", "agentStock", "posProfiles"]
+COLLECTIONS = [
+    "assignments",
+    "vouchers",
+    "boms",
+    "hampers",
+    "agentStock",
+    "posProfiles",
+    "beneficiaries",
+]
 
 
 def parse(value):

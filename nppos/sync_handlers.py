@@ -28,7 +28,10 @@ def _close_stale_openings(pos_profile, user):
     POS Closing Entry (preserving the audit trail) so the new opening can submit;
     cancelling is only a last-ditch fallback."""
     orphans = set()
-    for f in ({"pos_profile": pos_profile, "status": "Open"}, {"user": user, "status": "Open"}):
+    for f in (
+        {"pos_profile": pos_profile, "status": "Open"},
+        {"user": user, "status": "Open"},
+    ):
         orphans.update(frappe.get_all("POS Opening Entry", filters=f, pluck="name"))
     for name in orphans:
         _auto_close_orphan(name)
@@ -93,6 +96,9 @@ def push_pos_opening(client_ref, created_at, payload):
     doc.pos_profile = profile_name
     doc.company = pos_profile.company
     doc.user = frappe.session.user
+    doc.enable_entitlement_distribution = (
+        pos_profile.get("enable_entitlement_distribution") or 0
+    )
     doc.period_start_date = server_dt(created_at)
     doc.posting_date = nowdate()
     doc.append(
@@ -105,6 +111,39 @@ def push_pos_opening(client_ref, created_at, payload):
     doc.insert(ignore_permissions=True)
     doc.submit()
     return accepted(doc.name)
+
+
+def _attach_photo(doctype, name, photo):
+    """Attach the shift's close-out photo (a signed sheet or fingerprint slip
+    the agent captures on the device) to the closing entry.
+
+    Never fatal: a bad image must not strand an agent who can't end their shift,
+    and the closing entry is the record that matters. Skips if this doc already
+    carries an attachment, so a re-push after a lost response doesn't duplicate.
+    """
+    if not photo or not photo.get("data"):
+        return
+    try:
+        if frappe.db.exists(
+            "File", {"attached_to_doctype": doctype, "attached_to_name": name}
+        ):
+            return
+        frappe.get_doc(
+            {
+                "doctype": "File",
+                "file_name": photo.get("name") or f"{name}-close-out.jpg",
+                "attached_to_doctype": doctype,
+                "attached_to_name": name,
+                "is_private": 1,
+                "content": photo["data"],  # base64 (data-URI prefix tolerated)
+                "decode": True,
+            }
+        ).insert(ignore_permissions=True)
+    except Exception:
+        frappe.log_error(
+            title="NPPOS: closing entry photo attach failed",
+            message=frappe.get_traceback(),
+        )
 
 
 def push_pos_closing(client_ref, created_at, payload):
@@ -120,6 +159,8 @@ def push_pos_closing(client_ref, created_at, payload):
         "name",
     )
     if already:
+        # A retry may be carrying the photo whose first push never landed.
+        _attach_photo("POS Closing Entry", already, payload.get("photo"))
         return accepted(already)
 
     opening = frappe.get_doc("POS Opening Entry", opening_name)
@@ -143,6 +184,7 @@ def push_pos_closing(client_ref, created_at, payload):
         },
     )
     doc.insert(ignore_permissions=True)
+    _attach_photo(doc.doctype, doc.name, payload.get("photo"))
     doc.submit()
     return accepted(doc.name)
 
@@ -178,6 +220,7 @@ def _redeem_voucher(client_ref, payload, entitlement_type):
         "merchant",
         "warehouse",
         "item",
+        "bom",
         "uom",
         "rate",
         "paid_from",
@@ -193,12 +236,22 @@ def _redeem_voucher(client_ref, payload, entitlement_type):
         red.warehouse = payload["warehouse"]
     if payload.get("posSession"):
         # Both apps send the POS Opening Entry's document name (the device
-        # resolves its local session id before pushing).
-        pos_profile_name = frappe.db.get_value(
-            "POS Opening Entry", payload["posSession"], "pos_profile"
+        # resolves its local session id before pushing). Stamping the opening
+        # entry itself is what makes the redemption addressable by shift — the
+        # POS Closing Entry autofills its Linked Redemptions table from the
+        # submitted redemptions sharing its pos_opening_entry
+        # (nppos/overrides/pos_closing_entry.py), so without this the table
+        # comes out empty.
+        opening = frappe.db.get_value(
+            "POS Opening Entry",
+            payload["posSession"],
+            ["name", "pos_profile"],
+            as_dict=True,
         )
-        if pos_profile_name:
-            red.pos_profile = pos_profile_name
+        if opening:
+            red.pos_opening_entry = opening.name
+            if opening.pos_profile:
+                red.pos_profile = opening.pos_profile
     if entitlement_type == "Cash":
         red.amount = payload.get("amount") or ev.amount
     else:
@@ -215,7 +268,9 @@ def _redeem_voucher(client_ref, payload, entitlement_type):
     )
     related = {"entitlement_redemption": red.name}
     if spawned:
-        related["payment_entry" if entitlement_type == "Cash" else "stock_entry"] = spawned
+        related["payment_entry" if entitlement_type == "Cash" else "stock_entry"] = (
+            spawned
+        )
     return accepted(spawned or red.name, related=related)
 
 
