@@ -9,6 +9,10 @@ class EntitlementVoucher(Document):
 	def before_save(self):
 		self.generate_qr_code()
 
+	def before_submit(self):
+		if self.status == "Draft":
+			self.status = "Active"
+
 	def on_submit(self):
 		self.generate_qr_code()
 

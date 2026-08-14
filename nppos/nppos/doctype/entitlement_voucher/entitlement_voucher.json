@@ -31,6 +31,7 @@
   "warehouse",
   "entitlement_section",
   "item",
+  "bom",
   "currency",
   "column_break_jrjo",
   "uom",
@@ -446,6 +447,13 @@
    "print_hide": 1,
    "read_only": 1,
    "search_index": 1
+  },
+  {
+   "depends_on": "eval: doc.entitlement_type == \"Goods\"",
+   "fieldname": "bom",
+   "fieldtype": "Link",
+   "label": "BOM",
+   "options": "BOM"
   }
  ],
  "grid_page_length": 50,
@@ -469,7 +477,7 @@
    "link_fieldname": "entitlement_voucher"
   }
  ],
- "modified": "2026-08-05 14:20:47.549451",
+ "modified": "2026-08-14 06:34:11.126030",
  "modified_by": "Administrator",
  "module": "NPPOS",
  "name": "Entitlement Voucher",

@@ -1,14 +1,15 @@
 /**
- * CameraScanner – an always-on inline camera panel that reads a QR code or
- * barcode and passes the decoded text back to the caller.
+ * CameraScanner – an inline camera panel that reads a QR code or barcode and
+ * passes the decoded text back to the caller.
  *
- * The camera opens automatically on page load (prompting for permission when
- * needed), decodes frames continuously, and stops once a value is captured.
- * When the camera cannot start (including a denied/blocked permission) it
- * shows clear guidance with "Allow camera access" / "Retry camera" options.
+ * The camera is opened manually via an "Open camera" button (prompting for
+ * permission when needed), decodes frames continuously, and stops once a value
+ * is captured. When the camera cannot start (including a denied/blocked
+ * permission) it shows clear guidance with "Allow camera access" / "Retry
+ * camera" options.
  */
 import { CameraOff, Info, RefreshCw, ScanLine, ShieldAlert } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useCamera } from "@/hooks/use-camera";
@@ -21,7 +22,7 @@ interface CameraScannerProps {
 }
 
 /**
- * CameraScanner – an embedded, always-on QR/barcode scanner.
+ * CameraScanner – an embedded QR/barcode scanner, opened manually.
  *
  * @param onScan - callback with the decoded value
  * @param disabled - disables the control while loading
@@ -38,20 +39,12 @@ export default function CameraScanner({ onScan, disabled }: CameraScannerProps) 
     start,
     stop,
   } = useCamera("nppos-camera-reader");
-  const didAutoStart = useRef(false);
+  const [hasOpened, setHasOpened] = useState(false);
 
   // Always route the latest scan result callback.
   useEffect(() => {
     setScanHandler(onScan);
   }, [onScan, setScanHandler]);
-
-  // Auto-open the camera once when the page mounts (prompts for permission).
-  useEffect(() => {
-    if (didAutoStart.current) return;
-    didAutoStart.current = true;
-    void requestAndStart();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div className="w-full rounded-lg border bg-muted/30 p-3 max-w-sm">
@@ -66,7 +59,10 @@ export default function CameraScanner({ onScan, disabled }: CameraScannerProps) 
             type="button"
             variant="ghost"
             size="sm"
-            onClick={stop}
+            onClick={() => {
+              setHasOpened(true);
+              stop();
+            }}
             disabled={disabled || isStarting}
             className="h-7 text-xs gap-1"
             aria-label="Close camera"
@@ -78,12 +74,15 @@ export default function CameraScanner({ onScan, disabled }: CameraScannerProps) 
             <Button
               type="button"
               size="sm"
-              onClick={requestAndStart}
+              onClick={() => {
+                setHasOpened(true);
+                void requestAndStart();
+              }}
               disabled={disabled || isStarting}
               className="h-7 text-xs gap-1"
               aria-label="Open camera"
             >
-              <RefreshCw className="h-3 w-3" /> {didAutoStart.current ? "Scan again" : "Open camera"}
+              <ScanLine className="h-3 w-3" /> {hasOpened ? "Scan again" : "Open camera"}
             </Button>
           )
         )}
@@ -108,7 +107,7 @@ export default function CameraScanner({ onScan, disabled }: CameraScannerProps) 
       {/* Idle state after a scan captured (or before first open) */}
       {!isStarting && !isActive && !error && (
         <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
-          {didAutoStart.current
+          {hasOpened
             ? "Scan complete. Tap “Scan again” to capture another voucher."
             : "Tap “Open camera” to start scanning."}
         </div>
@@ -137,7 +136,10 @@ export default function CameraScanner({ onScan, disabled }: CameraScannerProps) 
             <Button
               type="button"
               size="sm"
-              onClick={requestAndStart}
+              onClick={() => {
+                setHasOpened(true);
+                void requestAndStart();
+              }}
               disabled={disabled || isStarting}
               className="gap-1.5"
             >
@@ -147,7 +149,10 @@ export default function CameraScanner({ onScan, disabled }: CameraScannerProps) 
               type="button"
               variant="outline"
               size="sm"
-              onClick={start}
+              onClick={() => {
+                setHasOpened(true);
+                void start();
+              }}
               disabled={disabled || isStarting}
               className="gap-1.5"
             >
