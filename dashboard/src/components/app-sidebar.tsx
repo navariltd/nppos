@@ -31,7 +31,7 @@ const privateNavGroups = [
         icon: LayoutDashboard,
       },
       {
-        title: "Transaction History",
+        title: "Redemptions",
         url: "/pos/transactions",
         icon: History,
       },
