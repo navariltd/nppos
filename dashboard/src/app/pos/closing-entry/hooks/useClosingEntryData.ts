@@ -4,6 +4,7 @@
  * Entry page. Works online (Frappe) and offline (cached opening entry).
  */
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { toast } from "sonner";
 
@@ -11,7 +12,11 @@ import { useOffline } from "@/contexts/offline-context";
 import { usePOS } from "@/contexts/pos-context";
 import { useUser } from "@/contexts/user-context";
 import { callPost } from "@/lib/frappe-service";
-import { pendingRepo } from "@/lib/offline/repository";
+import {
+  initPaymentsFromBalance,
+  mergePayments,
+  sumTotals,
+} from "../payment-utils";
 import type {
   GetInvoicesResponse,
   Invoice,
@@ -19,11 +24,6 @@ import type {
   TaxSummary,
   TotalsData,
 } from "../types";
-import {
-  initPaymentsFromBalance,
-  mergePayments,
-  sumTotals,
-} from "../payment-utils";
 import { nowDatetime, toERPNextDatetime } from "../utils";
 
 const GET_INVOICES_METHOD =
@@ -60,10 +60,17 @@ interface ClosingEntryData {
 }
 
 export function useClosingEntryData(): ClosingEntryData {
+  const navigate = useNavigate();
   const { user } = useUser();
-  const { posOpeningEntry, isLoadingMetadata, posProfile: activePosProfile } =
-    usePOS();
-  const { isOnline, syncNow } = useOffline();
+  const {
+    posOpeningEntry,
+    isLoadingMetadata,
+    posProfile: activePosProfile,
+  } = usePOS();
+  const { isOnline, requireOnline } = useOffline();
+  const { post: insertDoc } = callPost("frappe.client.insert");
+  const { post: getDoc } = callPost("frappe.client.get");
+  const { post: saveDoc } = callPost("frappe.desk.form.save.savedocs");
 
   const openingRow = Array.isArray(posOpeningEntry) ? posOpeningEntry[0] : null;
   const openingName = openingRow?.name ?? "";
@@ -102,7 +109,7 @@ export function useClosingEntryData(): ClosingEntryData {
 
   const { post: fetchInvoices } =
     callPost<GetInvoicesResponse>(GET_INVOICES_METHOD);
-  const { post: getDoc } = callPost("frappe.desk.form.load.getdoc");
+  const { post: loadDoc } = callPost("frappe.desk.form.load.getdoc");
 
   const loadData = useCallback(async () => {
     if (!openingName) return;
@@ -110,7 +117,7 @@ export function useClosingEntryData(): ClosingEntryData {
     setFetchError(null);
 
     try {
-      const openingRes: any = await getDoc({
+      const openingRes: any = await loadDoc({
         doctype: "POS Opening Entry",
         name: openingName,
       });
@@ -206,47 +213,80 @@ export function useClosingEntryData(): ClosingEntryData {
     setIsSaving(true);
     setSaveError(null);
 
-    // Offline-first: always queue a pos_closing outbox entry locally so it
-    // auto-syncs on reconnect; when online it pushes immediately.
-    const countedCash = payments.reduce(
-      (sum: number, p: PaymentRow) => sum + (p.closing_amount ?? 0),
-      0,
-    );
-    const expectedCash = payments.reduce(
-      (sum: number, p: PaymentRow) => sum + (p.expected_amount ?? 0),
-      0,
-    );
-    const openingFloat = payments.reduce(
-      (sum: number, p: PaymentRow) => sum + (p.opening_amount ?? 0),
-      0,
-    );
-
+    // This route ALWAYS pushes to the server — it must be online.
     try {
-      await pendingRepo.enqueue({
-        kind: "pos_closing",
-        clientRef: `close_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-        payload: {
-          kind: "pos_closing",
-          session: openingName,
-          openingFloat,
-          expectedCash,
-          countedCash,
-          difference: countedCash - expectedCash,
-        },
-      });
-      setSavedDocName("queued");
-      toast.success(
-        isOnline
-          ? "Closing entry saved and uploaded."
-          : "Closing entry saved offline. It will sync when you reconnect.",
-      );
-      if (isOnline) {
-        await syncNow().catch(() => {
-          // It will retry via auto-sync.
+      requireOnline();
+
+      const closingDoc = {
+        doctype: "POS Closing Entry",
+        pos_opening_entry: openingName,
+        pos_profile: posProfile,
+        company,
+        user: cashier || user?.name,
+        period_start_date: periodStart,
+        period_end_date: periodEnd,
+        posting_date: postingDate,
+        posting_time: postingTime,
+        payment_reconciliation: payments.map((p) => ({
+          mode_of_payment: p.mode_of_payment,
+          opening_amount: p.opening_amount ?? 0,
+          expected_amount: p.expected_amount ?? 0,
+          closing_amount: p.closing_amount ?? 0,
+          difference: (p.closing_amount ?? 0) - (p.expected_amount ?? 0),
+        })),
+      };
+
+      // Insert the POS Closing Entry (Draft), re-fetch the full document, then
+      // submit it via frappe.desk.form.save.savedocs with action="Submit".
+      const insertRes: any = await insertDoc({ doc: closingDoc });
+      const insertedName =
+        insertRes?.message?.name ?? insertRes?.message ?? insertRes?.name;
+      let serverName = insertedName;
+
+      if (serverName) {
+        const freshRes: any = await getDoc({
+          doctype: "POS Closing Entry",
+          name: serverName,
         });
+        const fresh = freshRes?.message ?? freshRes ?? {};
+        const freshName = fresh?.name ?? serverName;
+        // Passing the full fetched doc (incl. `modified`) lets savedocs Submit's
+        // check_if_latest pass reliably, even when background processing bumps
+        // the timestamp.
+        const saveRes: any = await saveDoc({
+          doc: JSON.stringify(fresh),
+          action: "Submit",
+        });
+        serverName =
+          saveRes?.message?.doc?.name ??
+          saveRes?.doc?.name ??
+          saveRes?.message ??
+          freshName;
+      }
+
+      setSavedDocName(serverName || "submitted");
+      toast.success(
+        serverName
+          ? `Closing entry ${serverName} submitted.`
+          : "Closing entry submitted.",
+      );
+      // Navigate to the submitted closing entry's Form page.
+      if (serverName) {
+        navigate(`/app/pos-closing-entry/${serverName}`);
       }
     } catch (err: any) {
-      setSaveError(err?.message ?? "Failed to queue closing entry");
+      if (err?.offline) {
+        setSaveError(
+          err?.message ??
+            "You are offline. Closing entry requires an internet connection.",
+        );
+      } else {
+        setSaveError(
+          err?.messages?.[0] ??
+            err?.message ??
+            "Failed to submit closing entry",
+        );
+      }
     } finally {
       setIsSaving(false);
     }

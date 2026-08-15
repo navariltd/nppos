@@ -2,8 +2,8 @@
  * ClosingEntryPage – the POS closing entry screen.
  *
  * Renders the period/user details, invoice tables, payment reconciliation and
- * totals computed by the useClosingEntryData hook, and submits the closing
- * entry via the offline-first outbox.
+ * totals computed by the useClosingEntryData hook, and saves the closing
+ * entry locally (works fully offline).
  */
 "use client";
 
@@ -92,7 +92,7 @@ export default function ClosingEntryPage() {
         <div className="flex items-center gap-2">
           {savedDocName && (
             <span className="text-sm text-green-600 font-medium">
-              ✓ Saved as {savedDocName}
+              ✓ Submitted ({savedDocName})
             </span>
           )}
           <Button
