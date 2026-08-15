@@ -360,9 +360,25 @@ export default function VoucherDetails({
                         ? fmt(r.amount)
                         : `${r.qty || 0} pcs`}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      Local
-                    </TableCell>
+                      <TableCell className="text-xs">
+                        <Badge
+                          variant={
+                            r.syncStatus === "failed"
+                              ? "destructive"
+                              : r.syncStatus === "pending"
+                                ? "secondary"
+                                : "outline"
+                          }
+                        >
+                          {r.syncStatus === "synced"
+                            ? "Synced"
+                            : r.syncStatus === "pending"
+                              ? "Pending"
+                              : r.syncStatus === "failed"
+                                ? "Failed"
+                                : "Local"}
+                        </Badge>
+                      </TableCell>
                     <TableCell className="w-10"></TableCell>
                   </TableRow>
                 ))}
