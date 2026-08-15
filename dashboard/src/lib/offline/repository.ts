@@ -136,6 +136,11 @@ export const redemptionRepo = {
     await db.redemptions.update(id, { syncStatus: "pending" });
   },
 
+  /** Remove a local redemption record by id. */
+  async delete(id: string): Promise<void> {
+    await db.redemptions.delete(id);
+  },
+
   /** Remove all local redemption records. */
   async clearAll(): Promise<void> {
     await db.redemptions.clear();
