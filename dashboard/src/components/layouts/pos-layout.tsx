@@ -45,7 +45,12 @@ function ContentSkeleton() {
 
 function POSLayoutContent() {
   const { user, isLoading, isLoggedOut } = useUser();
-  const { posOpeningEntry, isLoadingMetadata, refreshPOSMetadata } = usePOS();
+  const {
+    posOpeningEntry,
+    isLoadingMetadata,
+    refreshPOSMetadata,
+    warehouse,
+  } = usePOS();
   const { initialSync, requireOnline } = useOffline();
   const location = useLocation();
   const navigate = useNavigate();
@@ -54,20 +59,21 @@ function POSLayoutContent() {
   // entry exists. Runs on EVERY page reload/mount and whenever the opening
   // entry changes, so the local voucher/stock snapshot is always fresh.
   React.useEffect(() => {
-    const hasOpening = posOpeningEntry && Array.isArray(posOpeningEntry)
-      ? posOpeningEntry.length > 0
-      : !!posOpeningEntry;
+    const hasOpening =
+      posOpeningEntry && Array.isArray(posOpeningEntry)
+        ? posOpeningEntry.length > 0
+        : !!posOpeningEntry;
     if (hasOpening && !isLoadingMetadata) {
       try {
         requireOnline();
-        initialSync().catch(() => {
+        initialSync(warehouse ?? undefined).catch(() => {
           // Swallow — user can be offline; they'll use last-cached data.
         });
       } catch {
         // Offline — skip pull; local cache is used.
       }
     }
-  }, [posOpeningEntry, isLoadingMetadata]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [posOpeningEntry, isLoadingMetadata, warehouse]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoadingMetadata && !posOpeningEntry) {
     return <ContentSkeleton />;
@@ -97,10 +103,12 @@ function POSLayoutContent() {
             <Outlet />
           </div>
         </div>
-        <POSOpeningModal onSuccess={() => {
-          refreshPOSMetadata();
-          navigate("/pos", { replace: true });
-        }} />
+        <POSOpeningModal
+          onSuccess={() => {
+            refreshPOSMetadata();
+            navigate("/pos", { replace: true });
+          }}
+        />
       </div>
     );
   }

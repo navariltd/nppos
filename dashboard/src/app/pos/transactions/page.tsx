@@ -120,23 +120,7 @@ export default function TransactionsPage() {
                 {localRedemptions.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="px-4 font-medium text-xs">
-                      {r.syncStatus === "synced" ? (
-                        r.name
-                      ) : (
-                        <span className="flex items-center gap-1">
-                          {r.name}
-                          <Badge
-                            variant={
-                              r.syncStatus === "failed"
-                                ? "destructive"
-                                : "secondary"
-                            }
-                            className="text-[9px]"
-                          >
-                            {r.syncStatus}
-                          </Badge>
-                        </span>
-                      )}
+                      {r.name}
                     </TableCell>
                     <TableCell className="text-xs">
                       {r.entitlement_voucher || "—"}
@@ -152,12 +136,8 @@ export default function TransactionsPage() {
                         : `${r.qty || 0} pcs`}
                     </TableCell>
                     <TableCell className="text-xs">{r.posting_date}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground capitalize">
-                      {r.syncStatus === "synced"
-                        ? "Synced"
-                        : r.syncStatus === "failed"
-                          ? "Failed (will retry)"
-                          : "Pending sync"}
+                    <TableCell className="text-xs text-muted-foreground">
+                      Local
                     </TableCell>
                   </TableRow>
                 ))}
