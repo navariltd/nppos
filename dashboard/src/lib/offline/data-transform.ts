@@ -1,13 +1,14 @@
 /**
- * Pure mapping helpers that convert server payloads from nppos.sync_api into
- * the local Dexie table shapes (OfflineVoucher, OfflineStock).
+ * Pure mapping helpers that convert server payloads from standard
+ * frappe.client.get_list queries into the local Dexie table shapes
+ * (OfflineVoucher, OfflineStock).
  *
  * Kept free of side effects and DB access so the mapping is trivially testable.
  */
 import type { OfflineStock, OfflineVoucher } from "./db";
 
 /**
- * Normalise a voucher row from `sync_pull` into an OfflineVoucher.
+ * Normalise a voucher row from a get_list query into an OfflineVoucher.
  *
  * `raw` preserves the ENTIRE voucher document (including the embedded `doc`)
  * so offline pages can reconstruct every field for local redemptions.
@@ -45,7 +46,7 @@ export function toOfflineVoucher(
 }
 
 /**
- * Normalise a stock row from `sync_pull` into an OfflineStock.
+ * Normalise a stock row from a get_list query into an OfflineStock.
  *
  * @param s - raw agent_stock row from the sync payload
  * @returns {OfflineStock} the normalised row

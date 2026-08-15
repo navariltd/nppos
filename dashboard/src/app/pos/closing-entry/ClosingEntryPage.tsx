@@ -1,9 +1,9 @@
 /**
  * ClosingEntryPage – the POS closing entry screen.
  *
- * Renders the period/user details, invoice tables, payment reconciliation and
- * totals computed by the useClosingEntryData hook, and submits the closing
- * entry via the offline-first outbox.
+ * Renders the period/user details, entitlement-redemption table for the current
+ * session, payment reconciliation and totals computed from redemptions only.
+ * Saves the closing entry locally (works fully offline).
  */
 "use client";
 
@@ -20,9 +20,9 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUser } from "@/contexts/user-context";
-import { InvoicesTable } from "./components/InvoicesTable";
 import { PaymentReconciliationTable } from "./components/PaymentReconciliationTable";
 import { PeriodDetailsCard } from "./components/PeriodDetailsCard";
+import { RedemptionsTable } from "./components/RedemptionsTable";
 import { UserDetailsCard } from "./components/UserDetailsCard";
 import { useClosingEntryData } from "./hooks/useClosingEntryData";
 import { fmt } from "./utils";
@@ -57,12 +57,10 @@ export default function ClosingEntryPage() {
     setPostingDate,
     postingTime,
     setPostingTime,
-    posInvoices,
-    salesInvoices,
+    redemptions,
     payments,
     totals,
     isLoadingData,
-    fetchError,
     loadData,
     handleClosingChange,
     isSaving,
@@ -74,9 +72,8 @@ export default function ClosingEntryPage() {
   if (userLoading) return <SkeletonScreen />;
   if (!user) return <Navigate to="/auth/sign-in" replace />;
 
-  const allInvoices = [...posInvoices, ...salesInvoices];
   const hasDifferences = payments.some((p) => Math.abs(p.difference) > 0.01);
-  const hasInvoices = allInvoices.length > 0;
+  const hasRedemptions = redemptions.length > 0;
 
   return (
     <div className="px-4 lg:px-6 space-y-6 pb-8">
@@ -92,7 +89,7 @@ export default function ClosingEntryPage() {
         <div className="flex items-center gap-2">
           {savedDocName && (
             <span className="text-sm text-green-600 font-medium">
-              ✓ Saved as {savedDocName}
+              ✓ Created ({savedDocName})
             </span>
           )}
           <Button
@@ -110,7 +107,7 @@ export default function ClosingEntryPage() {
           <Button
             size="lg"
             onClick={handleSave}
-            disabled={isSaving || isLoadingData}
+            disabled={isSaving || isLoadingData || !hasRedemptions}
             className="gap-2"
           >
             {isSaving ? (
@@ -118,7 +115,7 @@ export default function ClosingEntryPage() {
             ) : (
               <Save className="h-4 w-4" />
             )}
-            {isSaving ? "Saving..." : "Save"}
+            {isSaving ? "Creating..." : "Close Session"}
           </Button>
         </div>
       </div>
@@ -178,55 +175,19 @@ export default function ClosingEntryPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Linked Invoices</CardTitle>
+          <CardTitle>Entitlement Redemptions</CardTitle>
           <CardDescription>
-            {allInvoices.length} invoice{allInvoices.length !== 1 ? "s" : ""} in
-            this period
-            {fetchError && !isLoadingData && (
-              <span className="text-destructive ml-2">({fetchError})</span>
-            )}
+            {redemptions.length} redemption
+            {redemptions.length !== 1 ? "s" : ""} in the current POS session
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {posInvoices.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold mb-2">
-                POS Transactions ({posInvoices.length})
-              </h3>
-              <InvoicesTable
-                title="POS Invoices"
-                invoices={posInvoices}
-                isLoading={isLoadingData}
-                error={null}
-                onRetry={loadData}
-              />
-            </div>
-          )}
-          {salesInvoices.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold mb-2">
-                Sales Invoice Transactions ({salesInvoices.length})
-              </h3>
-              <InvoicesTable
-                title="Sales Invoices"
-                invoices={salesInvoices}
-                isLoading={isLoadingData}
-                error={null}
-                onRetry={loadData}
-              />
-            </div>
-          )}
-          {!hasInvoices && !isLoadingData && (
-            <p className="text-center py-4 text-muted-foreground">
-              No invoices found for the selected period.
-            </p>
-          )}
-          {isLoadingData && (
-            <div className="text-center py-4 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
-              Loading invoices…
-            </div>
-          )}
+        <CardContent>
+          <RedemptionsTable
+            redemptions={redemptions}
+            isLoading={isLoadingData}
+            error={null}
+            onRetry={loadData}
+          />
         </CardContent>
       </Card>
 

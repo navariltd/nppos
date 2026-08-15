@@ -5,7 +5,7 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
 
-import { CheckSquare, History, LayoutDashboard, LogIn } from "lucide-react";
+import { Boxes, CheckSquare, History, LayoutDashboard, LogIn } from "lucide-react";
 
 import { Logo } from "@/components/logo";
 import { NavMain } from "@/components/nav-main";
@@ -31,9 +31,14 @@ const privateNavGroups = [
         icon: LayoutDashboard,
       },
       {
-        title: "Transaction History",
+        title: "Redemptions",
         url: "/pos/transactions",
         icon: History,
+      },
+      {
+        title: "Stock Balance",
+        url: "/pos/stock-balance",
+        icon: Boxes,
       },
       {
         title: "Closing Entry",

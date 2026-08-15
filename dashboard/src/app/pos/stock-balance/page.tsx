@@ -71,7 +71,7 @@ export default function StockBalancePage() {
     if (!isOnline) return;
     setRefreshing(true);
     try {
-      await initialSync();
+      await initialSync(warehouse ?? undefined);
       load();
     } finally {
       setRefreshing(false);
@@ -121,7 +121,7 @@ export default function StockBalancePage() {
             </div>
           ) : rows.length === 0 ? (
             <div className="px-6 py-10 text-center text-muted-foreground">
-              No stock balance available. Sync online to load it.
+              No stock balance available. Refresh online to load it.
             </div>
           ) : (
             <Table>

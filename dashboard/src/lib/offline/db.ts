@@ -2,14 +2,14 @@
  * NPPOS offline database (Dexie / IndexedDB).
  *
  * Stores the data the POS agent needs while offline:
- *  - vouchers     – Entitlement Vouchers for the agent's warehouse (pulled via
- *                   nppos.sync_api.sync_pull)
+ *  - vouchers     – Entitlement Vouchers for the agent's warehouse (fetched via
+ *                   a standard frappe.client.get_list query)
  *  - stockBalance – Bin levels (on-hand) for the warehouse
- *  - redemptions  – local Entitlement Redemption duplicates, tracked with a
- *                   `syncStatus` so unsynced ones can be pushed later
- *  - pending      – outbox queue for offline-created docs (redemptions,
- *                   closing entries) awaiting push via sync_push
- *  - meta         – single-row key/value store (last cursor, warehouse, profile)
+ *  - redemptions  – local Entitlement Redemption records (stored locally only;
+ *                   never pushed to the server)
+ *  - localDocs    – locally-stored documents (e.g. POS Closing Entries)
+ *  - pending      – legacy outbox queue (retained for backward compat)
+ *  - meta         – single-row key/value store (last refresh, warehouse, profile)
  */
 import Dexie, { type EntityTable } from "dexie";
 
@@ -58,7 +58,7 @@ export interface OfflineStock {
 
 /** A locally-created Entitlement Redemption awaiting (or after) sync. */
 export interface OfflineRedemption {
-  /** Local id (`red-<uuid>`). The idempotency key sent as client_ref. */
+  /** Local id (`red-<uuid>`). */
   id: string;
   syncStatus: SyncStatus;
   kind: "cash_payment" | "goods_issue";
@@ -76,7 +76,47 @@ export interface OfflineRedemption {
   voucherSnapshot?: Record<string, any>;
 }
 
-/** An outbox entry queued for push to nppos.sync_api.sync_push. */
+/** A locally-stored document (e.g. POS Opening/Closing Entry) kept for offline records. */
+export interface OfflineLocalDoc {
+  id: string;
+  kind: "pos_closing" | "pos_opening";
+  data: Record<string, any>;
+  createdAt: string;
+}
+
+/** A cached Beneficiary doc for richer voucher party details. */
+export interface OfflineBeneficiary {
+  id: string; // Beneficiary name (BENE-...)
+  full_name: string;
+  is_proxy?: number;
+  phone_number?: string;
+  email?: string;
+  id_number?: string;
+  beneficiary_type?: string;
+  status?: string;
+  warehouse?: string;
+  raw: Record<string, any>;
+  syncedAt: string;
+}
+
+/** A BOM component (one line of a hamper's Bill of Materials). */
+export interface OfflineBomComponent {
+  item_code: string;
+  item_name: string;
+  qty: number;
+  uom: string;
+}
+
+/** A cached BOM (hamper) keyed by the hamper item code, with components + stock. */
+export interface OfflineBom {
+  id: string; // hamper item_code
+  name?: string; // default BOM name
+  item_name?: string;
+  components: OfflineBomComponent[];
+  syncedAt: string;
+}
+
+/** A legacy outbox entry (retained for backward compatibility). */
 export interface OfflinePending {
   id: string;
   kind:
@@ -106,6 +146,9 @@ const db = new Dexie("NPPOSDB") as Dexie & {
   stockBalance: EntityTable<OfflineStock, "id">;
   redemptions: EntityTable<OfflineRedemption, "id">;
   pending: EntityTable<OfflinePending, "id">;
+  localDocs: EntityTable<OfflineLocalDoc, "id">;
+  beneficiaries: EntityTable<OfflineBeneficiary, "id">;
+  boms: EntityTable<OfflineBom, "id">;
   meta: EntityTable<OfflineMeta, "key">;
 };
 
@@ -114,6 +157,9 @@ db.version(1).stores({
   stockBalance: "id, warehouse, hamper_id",
   redemptions: "id, syncStatus, createdAt, voucherNo",
   pending: "id, kind, syncStatus, createdAt",
+  localDocs: "id, kind, createdAt",
+  beneficiaries: "id, full_name, phone_number, email",
+  boms: "id, name",
   meta: "key",
 });
 

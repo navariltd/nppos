@@ -2,7 +2,16 @@
  * VoucherDetails – renders the detailed summary, action, and redemption
  * history sections for a single selected voucher in the search page.
  */
-import { Banknote, Clock, ExternalLink, FileText, Package, ArrowRight } from "lucide-react";
+import {
+  Banknote,
+  Clock,
+  FileText,
+  Mail,
+  Package,
+  Phone,
+  ArrowRight,
+  User,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +31,10 @@ import { dsLabel, dsVariant, fmt } from "../utils";
 type Voucher = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Redemption = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Beneficiary = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Bom = any;
 
 interface VoucherDetailsProps {
   voucher: Voucher;
@@ -36,6 +49,10 @@ interface VoucherDetailsProps {
   remainingAmount: number;
   remainingQty: number;
   canRedeem: boolean;
+  beneficiary?: Beneficiary | null;
+  bom?: Bom | null;
+  hamperBalance?: number;
+  noStock?: boolean;
 }
 
 export default function VoucherDetails({
@@ -51,6 +68,10 @@ export default function VoucherDetails({
   remainingAmount,
   remainingQty,
   canRedeem,
+  beneficiary,
+  bom,
+  hamperBalance = 0,
+  noStock = false,
 }: VoucherDetailsProps) {
   const navigate = useNavigate();
 
@@ -92,7 +113,9 @@ export default function VoucherDetails({
           </div>
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Party</p>
-            <p className="font-medium">{voucher.party || "—"}</p>
+            <p className="font-medium">
+              {beneficiary?.full_name || voucher.party || "—"}
+            </p>
           </div>
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Party Type</p>
@@ -152,6 +175,102 @@ export default function VoucherDetails({
         </CardContent>
       </Card>
 
+      {/* Beneficiary Details (when party is a Beneficiary) */}
+      {beneficiary && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <User className="h-5 w-5 text-primary" /> Beneficiary Details
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Full Name</p>
+              <p className="font-semibold">{beneficiary.full_name || "—"}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Beneficiary No</p>
+              <p className="font-medium">
+                {beneficiary.id || voucher.party || "—"}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">ID Number</p>
+              <p className="font-medium">{beneficiary.id_number || "—"}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Proxy</p>
+              <p className="font-medium">{beneficiary.is_proxy ? "Yes" : "No"}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Beneficiary Type</p>
+              <p className="font-medium">{beneficiary.beneficiary_type || "—"}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Status</p>
+              <p className="font-medium">{beneficiary.status || "—"}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Phone className="h-3 w-3" /> Phone
+              </p>
+              <p className="font-medium">{beneficiary.phone_number || "—"}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Mail className="h-3 w-3" /> Email
+              </p>
+              <p className="font-medium">{beneficiary.email || "—"}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Hamper Components (when the voucher has a BOM) */}
+      {bom && bom.components?.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Package className="h-5 w-5 text-blue-500" /> Hamper Components
+            </CardTitle>
+            <div className="text-sm text-muted-foreground">
+              {bom.name || voucher.item} · Available balance:{" "}
+              <span
+                className={
+                  hamperBalance > 0
+                    ? "text-green-600 font-medium"
+                    : "text-destructive font-medium"
+                }
+              >
+                {hamperBalance}
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="px-4">Item</TableHead>
+                  <TableHead className="text-right">Qty / Unit</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {bom.components.map((c: any) => (
+                  <TableRow key={c.item_code}>
+                    <TableCell className="px-4 font-medium text-xs">
+                      {c.item_name || c.item_code}
+                    </TableCell>
+                    <TableCell className="text-right text-xs">
+                      {c.qty} {c.uom}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Action */}
       {canRedeem ? (
         <Card className="border-primary/20 bg-primary/5">
@@ -171,23 +290,28 @@ export default function VoucherDetails({
               size="lg"
               className="gap-2"
             >
-              {isCash ? "Issue Cash" : "Issue Goods"} <ArrowRight className="h-4 w-4" />
+              {isCash ? "Issue Cash" : "Issue Goods"}{" "}
+              <ArrowRight className="h-4 w-4" />
             </Button>
           </CardContent>
         </Card>
       ) : (
-        <Card className="border-muted">
+        <Card className={noStock ? "border-destructive/50 bg-destructive/5" : "border-muted"}>
           <CardContent className="pt-6">
             <p className="font-medium">
               Status: {dsLabel(voucher.status ?? voucher.docstatus)}
             </p>
-            <p className="text-sm text-muted-foreground">
-              {!isSubmitted
-                ? "Only active vouchers can be redeemed."
-                : !isOnline
-                  ? "Reconnect to process this redemption."
+            {noStock ? (
+              <p className="text-sm text-destructive font-medium mt-1">
+                ⚠ Cannot redeem — no stock available for {voucher.item || "this item"}.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {!isSubmitted
+                  ? "Only active vouchers within their validity period can be redeemed."
                   : "This voucher has been fully redeemed."}
-            </p>
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -221,23 +345,7 @@ export default function VoucherDetails({
                 {redemptions.map((r: Redemption) => (
                   <TableRow key={r.name}>
                     <TableCell className="px-4 font-medium text-xs">
-                      {r.syncStatus && r.syncStatus !== "synced" ? (
-                        <span className="flex items-center gap-1">
-                          {r.name}
-                          <Badge
-                            variant={
-                              r.syncStatus === "failed"
-                                ? "destructive"
-                                : "secondary"
-                            }
-                            className="text-[9px]"
-                          >
-                            {r.syncStatus}
-                          </Badge>
-                        </span>
-                      ) : (
-                        r.name
-                      )}
+                      {r.name}
                     </TableCell>
                     <TableCell className="text-xs">
                       {r.posting_date || r.creation?.slice(0, 10)}
@@ -252,28 +360,26 @@ export default function VoucherDetails({
                         ? fmt(r.amount)
                         : `${r.qty || 0} pcs`}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {r.syncStatus
-                        ? r.syncStatus === "synced"
-                          ? "Synced"
-                          : "Pending"
-                        : r.owner?.split("@")[0] || "—"}
-                    </TableCell>
-                    <TableCell>
-                      {!r.syncStatus && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() =>
-                            navigate(`/app/entitlement-redemption/${r.name}`)
+                      <TableCell className="text-xs">
+                        <Badge
+                          variant={
+                            r.syncStatus === "failed"
+                              ? "destructive"
+                              : r.syncStatus === "pending"
+                                ? "secondary"
+                                : "outline"
                           }
-                          title="Open"
                         >
-                          <ExternalLink className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </TableCell>
+                          {r.syncStatus === "synced"
+                            ? "Synced"
+                            : r.syncStatus === "pending"
+                              ? "Pending"
+                              : r.syncStatus === "failed"
+                                ? "Failed"
+                                : "Local"}
+                        </Badge>
+                      </TableCell>
+                    <TableCell className="w-10"></TableCell>
                   </TableRow>
                 ))}
               </TableBody>

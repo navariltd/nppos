@@ -1,16 +1,21 @@
 "use client";
 
+import { WifiOff } from "lucide-react";
+
 import { CommandSearch, SearchTrigger } from "@/components/command-search";
 import { ModeToggle } from "@/components/mode-toggle";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import * as React from "react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useOffline } from "@/contexts/offline-context";
 import { useUser } from "@/contexts/user-context";
+import * as React from "react";
 
 export function SiteHeader() {
   const { isLoading } = useUser();
+  const { isOnline } = useOffline();
   const [searchOpen, setSearchOpen] = React.useState(false);
+  const [hovered, setHovered] = React.useState(false);
 
   return (
     <>
@@ -31,6 +36,24 @@ export function SiteHeader() {
             </div>
           )}
           <div className="ml-auto flex items-center gap-2">
+            {!isOnline && (
+              <span
+                className="relative inline-flex items-center justify-center rounded-md border-2 p-1.5 cursor-default"
+                onMouseEnter={() => setHovered(true)}
+                onMouseLeave={() => setHovered(false)}
+              >
+                <WifiOff className="h-[1.2rem] w-[1.2rem]" />
+                {hovered && (
+                  <span
+                    role="tooltip"
+                    className="absolute top-full right-0 mt-2 z-50 w-56 rounded-md border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md"
+                  >
+                    You are offline. Redemptions can still be recorded and will
+                    be stored locally.
+                  </span>
+                )}
+              </span>
+            )}
             <ModeToggle />
           </div>
         </div>

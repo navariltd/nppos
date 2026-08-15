@@ -1,9 +1,17 @@
 /**
- * useClosingEntryData – fetches the POS Opening Entry, its linked invoices and
- * payment reconciliation rows, and exposes totals + save state for the Closing
- * Entry page. Works online (Frappe) and offline (cached opening entry).
+ * useClosingEntryData – reads the current POS Opening Entry from the cached
+ * session and lists Entitlement Redemptions for that session **from the local
+ * Dexie DB only** (never from the backend). The backend `autofill_entitlement_redemptions`
+ * validate hook populates the child table automatically on the server when the
+ * closing entry is created with `enable_entitlement_distribution = 1`.
+ *
+ * Saving: inserts a Draft POS Closing Entry (does NOT submit), then redirects
+ * to the closing entry Form page so the backend has already autofilled the
+ * redemptions. Finally clears local session redemptions so the next session
+ * starts clean.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { toast } from "sonner";
 
@@ -11,32 +19,17 @@ import { useOffline } from "@/contexts/offline-context";
 import { usePOS } from "@/contexts/pos-context";
 import { useUser } from "@/contexts/user-context";
 import { callPost } from "@/lib/frappe-service";
-import { pendingRepo } from "@/lib/offline/repository";
-import type {
-  GetInvoicesResponse,
-  Invoice,
-  PaymentRow,
-  TaxSummary,
-  TotalsData,
-} from "../types";
-import {
-  initPaymentsFromBalance,
-  mergePayments,
-  sumTotals,
-} from "../payment-utils";
-import { nowDatetime, toERPNextDatetime } from "../utils";
-
-const GET_INVOICES_METHOD =
-  "erpnext.accounts.doctype.pos_closing_entry.pos_closing_entry.get_invoices";
+import { redemptionRepo } from "@/lib/offline/repository";
+import type { OfflineRedemption } from "@/lib/offline/db";
+import { initPaymentsFromBalance } from "../payment-utils";
+import type { PaymentRow, RedemptionRow, TotalsData } from "../types";
+import { nowDatetime } from "../utils";
 
 interface ClosingEntryData {
   openingName: string;
   company: string;
-  setCompany: (v: string) => void;
   posProfile: string;
-  setPosProfile: (v: string) => void;
   cashier: string;
-  setCashier: (v: string) => void;
   periodStart: string;
   periodEnd: string;
   setPeriodEnd: (v: string) => void;
@@ -44,13 +37,10 @@ interface ClosingEntryData {
   setPostingDate: (v: string) => void;
   postingTime: string;
   setPostingTime: (v: string) => void;
-  posInvoices: Invoice[];
-  salesInvoices: Invoice[];
+  redemptions: RedemptionRow[];
   payments: PaymentRow[];
-  taxes: TaxSummary[];
   totals: TotalsData;
   isLoadingData: boolean;
-  fetchError: string | null;
   loadData: () => Promise<void>;
   handleClosingChange: (idx: number, value: number) => void;
   isSaving: boolean;
@@ -60,21 +50,41 @@ interface ClosingEntryData {
 }
 
 export function useClosingEntryData(): ClosingEntryData {
+  const navigate = useNavigate();
   const { user } = useUser();
-  const { posOpeningEntry, isLoadingMetadata, posProfile: activePosProfile } =
-    usePOS();
-  const { isOnline, syncNow } = useOffline();
+  const {
+    posOpeningEntry,
+    posProfile: activePosProfile,
+  } = usePOS();
+  const { requireOnline } = useOffline();
+  const { post: insertDoc } = callPost("frappe.client.insert");
 
   const openingRow = Array.isArray(posOpeningEntry) ? posOpeningEntry[0] : null;
   const openingName = openingRow?.name ?? "";
-  const cachedCompany = openingRow?.company ?? "";
-  const cachedCashier = openingRow?.user ?? "";
-  const cachedProfile = openingRow?.pos_profile ?? activePosProfile?.name ?? "";
-  const cachedStart = openingRow?.period_start_date ?? "";
-  const cachedBalanceDetails: Array<{
-    mode_of_payment: string;
-    opening_amount: number;
-  }> = openingRow?.balance_details ?? [];
+
+  // Stable snapshot of the cached opening data so dependencies don't change on
+  // every render (avoids the infinite re-render loop).
+  const openingRef = useRef<{
+    name: string;
+    company: string;
+    cashier: string;
+    profile: string;
+    start: string;
+    balanceDetails: Array<{
+      mode_of_payment: string;
+      opening_amount: number;
+    }>;
+  } | null>(null);
+  if (!openingRef.current || openingRef.current.name !== openingName) {
+    openingRef.current = {
+      name: openingName,
+      company: openingRow?.company ?? "",
+      cashier: openingRow?.user ?? "",
+      profile: openingRow?.pos_profile ?? activePosProfile?.name ?? "",
+      start: openingRow?.period_start_date ?? "",
+      balanceDetails: openingRow?.balance_details ?? [],
+    };
+  }
 
   const [company, setCompany] = useState("");
   const [posProfile, setPosProfile] = useState("");
@@ -84,10 +94,8 @@ export function useClosingEntryData(): ClosingEntryData {
   const [postingTime, setPostingTime] = useState(nowDatetime().slice(11, 19));
   const [periodEnd, setPeriodEnd] = useState(nowDatetime());
 
-  const [posInvoices, setPosInvoices] = useState<Invoice[]>([]);
-  const [salesInvoices, setSalesInvoices] = useState<Invoice[]>([]);
+  const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
-  const [taxes, setTaxes] = useState<TaxSummary[]>([]);
   const [totals, setTotals] = useState<TotalsData>({
     grand_total: 0,
     net_total: 0,
@@ -95,100 +103,68 @@ export function useClosingEntryData(): ClosingEntryData {
     total_taxes: 0,
   });
   const [isLoadingData, setIsLoadingData] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [savedDocName, setSavedDocName] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const { post: fetchInvoices } =
-    callPost<GetInvoicesResponse>(GET_INVOICES_METHOD);
-  const { post: getDoc } = callPost("frappe.desk.form.load.getdoc");
+  /** Build RedemptionRows from local (offline) redemptions for this session. */
+  const buildFromLocal = useCallback(async (): Promise<{
+    rows: RedemptionRow[];
+    totals: TotalsData;
+  }> => {
+    const all = await redemptionRepo.getAll();
+    const mine = all.filter((r: OfflineRedemption) => r.posSession === openingName);
+    const rows = mine.map((r: OfflineRedemption): RedemptionRow => ({
+      entitlement_redemption: r.serverName || r.id,
+      posting_date: r.createdAt?.slice(0, 10) ?? "",
+      party_type: r.voucherSnapshot?.party_type ?? "",
+      party: r.voucherSnapshot?.party ?? "",
+      item: r.voucherSnapshot?.item ?? "",
+      qty: r.qty ?? 0,
+      grand_total: r.amount ?? 0,
+    }));
+    let totalQty = 0;
+    let grandTotal = 0;
+    for (const r of rows) {
+      totalQty += r.qty || 0;
+      grandTotal += r.grand_total || 0;
+    }
+    return {
+      rows,
+      totals: {
+        total_quantity: totalQty,
+        net_total: grandTotal,
+        grand_total: grandTotal,
+        total_taxes: 0,
+      },
+    };
+  }, [openingName]);
 
+  /* Load data from the cached opening entry + local Dexie redemptions only. */
   const loadData = useCallback(async () => {
     if (!openingName) return;
     setIsLoadingData(true);
-    setFetchError(null);
 
-    try {
-      const openingRes: any = await getDoc({
-        doctype: "POS Opening Entry",
-        name: openingName,
-      });
+    const snap = openingRef.current;
+    setCompany(snap?.company ?? "");
+    setPosProfile(snap?.profile ?? "");
+    setCashier(snap?.cashier || user?.name || "");
+    setPeriodStart(snap?.start ?? "");
+    setPeriodEnd(nowDatetime());
+    setPayments(initPaymentsFromBalance(snap?.balanceDetails ?? []));
 
-      const openingDoc =
-        openingRes?.message?.docs?.[0] ?? openingRes?.docs?.[0] ?? {};
-      const balanceDetails: Array<{
-        mode_of_payment: string;
-        opening_amount: number;
-      }> = openingDoc.balance_details ?? [];
-
-      const comp = openingDoc.company ?? "";
-      const profile = openingDoc.pos_profile ?? "";
-      const cashierName = openingDoc.user ?? user?.name ?? "";
-      const start = openingDoc.period_start_date ?? "";
-
-      setCompany(comp);
-      setPosProfile(profile);
-      setCashier(cashierName);
-      setPeriodStart(start);
-      setPeriodEnd(nowDatetime());
-
-      const initPayments = initPaymentsFromBalance(balanceDetails);
-
-      if (start && comp && profile) {
-        const startDt = toERPNextDatetime(start);
-        const endDt = toERPNextDatetime(nowDatetime());
-
-        const invRes: any = await fetchInvoices({
-          start: startDt,
-          end: endDt,
-          pos_profile: profile,
-          user: cashierName,
-        });
-
-        const data: GetInvoicesResponse = invRes.message ?? invRes;
-
-        const pos = data.invoices.filter(
-          (i: Invoice) => i.doctype === "POS Invoice",
-        );
-        const sales = data.invoices.filter(
-          (i: Invoice) => i.doctype === "Sales Invoice",
-        );
-
-        setPosInvoices(pos);
-        setSalesInvoices(sales);
-        setTaxes(data.taxes);
-        setPayments(mergePayments(initPayments, data.payments));
-        setTotals(sumTotals(data.invoices));
-      } else {
-        setPayments(initPayments);
-      }
-    } catch (err: any) {
-      console.error("Failed to load data:", err);
-      setFetchError(
-        err?.messages?.[0] ?? err?.message ?? "Failed to load opening entry",
-      );
-    } finally {
-      setIsLoadingData(false);
-    }
-  }, [openingName]); // eslint-disable-line react-hooks/exhaustive-deps
+    const { rows, totals } = await buildFromLocal();
+    rows.sort((a, b) => (a.posting_date || "").localeCompare(b.posting_date || ""));
+    setRedemptions(rows);
+    setTotals(totals);
+    setIsLoadingData(false);
+  }, [openingName, user?.name, buildFromLocal]);
 
   useEffect(() => {
-    if (isOnline) {
-      if (!isLoadingMetadata && openingName) {
-        loadData();
-      }
-    } else {
-      // Offline: populate from the cached opening entry so the page is usable.
-      setCompany(cachedCompany);
-      setPosProfile(cachedProfile);
-      setCashier(cachedCashier || user?.name || "");
-      setPeriodStart(cachedStart);
-      setPeriodEnd(nowDatetime());
-      setPayments(initPaymentsFromBalance(cachedBalanceDetails));
-      setIsLoadingData(false);
+    if (openingName) {
+      loadData();
     }
-  }, [isOnline, isLoadingMetadata, openingName, loadData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [openingName, loadData]);
 
   const handleClosingChange = (idx: number, value: number) => {
     setPayments((prev) => {
@@ -206,47 +182,66 @@ export function useClosingEntryData(): ClosingEntryData {
     setIsSaving(true);
     setSaveError(null);
 
-    // Offline-first: always queue a pos_closing outbox entry locally so it
-    // auto-syncs on reconnect; when online it pushes immediately.
-    const countedCash = payments.reduce(
-      (sum: number, p: PaymentRow) => sum + (p.closing_amount ?? 0),
-      0,
-    );
-    const expectedCash = payments.reduce(
-      (sum: number, p: PaymentRow) => sum + (p.expected_amount ?? 0),
-      0,
-    );
-    const openingFloat = payments.reduce(
-      (sum: number, p: PaymentRow) => sum + (p.opening_amount ?? 0),
-      0,
-    );
-
     try {
-      await pendingRepo.enqueue({
-        kind: "pos_closing",
-        clientRef: `close_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-        payload: {
-          kind: "pos_closing",
-          session: openingName,
-          openingFloat,
-          expectedCash,
-          countedCash,
-          difference: countedCash - expectedCash,
-        },
-      });
-      setSavedDocName("queued");
-      toast.success(
-        isOnline
-          ? "Closing entry saved and uploaded."
-          : "Closing entry saved offline. It will sync when you reconnect.",
-      );
-      if (isOnline) {
-        await syncNow().catch(() => {
-          // It will retry via auto-sync.
-        });
+      requireOnline();
+
+      // Do NOT append entitlement_redemptions — the backend validate hook
+      // `autofill_entitlement_redemptions` populates the child table from
+      // Entitlement Redemption docs linked to this POS Opening Entry.
+      const closingDoc = {
+        doctype: "POS Closing Entry",
+        pos_opening_entry: openingName,
+        pos_profile: posProfile,
+        company,
+        user: cashier || user?.name,
+        period_start_date: periodStart,
+        period_end_date: periodEnd,
+        posting_date: postingDate,
+        posting_time: postingTime,
+        enable_entitlement_distribution: 1,
+        // Totals will be recalculated by the backend autofill.
+        payment_reconciliation: payments.map((p) => ({
+          mode_of_payment: p.mode_of_payment,
+          opening_amount: p.opening_amount ?? 0,
+          expected_amount: p.expected_amount ?? 0,
+          closing_amount: p.closing_amount ?? 0,
+          difference: (p.closing_amount ?? 0) - (p.expected_amount ?? 0),
+        })),
+      };
+
+      // Insert a Draft POS Closing Entry (do NOT submit).
+      const insertRes: any = await insertDoc({ doc: closingDoc });
+      const name = insertRes?.message?.name ?? insertRes?.message ?? insertRes?.name;
+
+      if (!name) {
+        throw new Error("Failed to create POS Closing Entry.");
       }
+
+      setSavedDocName(name);
+      toast.success(`Closing entry ${name} created.`);
+
+      // Clear local session redemptions so each session starts with clean data.
+      const all = await redemptionRepo.getAll();
+      const mine = all.filter((r: OfflineRedemption) => r.posSession === openingName);
+      for (const r of mine) {
+        await redemptionRepo.markSynced(r.id, r.serverName || `CLOSED-${name}`);
+        await redemptionRepo.delete(r.id);
+      }
+
+      // Redirect to the closing entry Form page — backend autofill has already
+      // populated the redemptions there.
+      navigate(`/app/pos-closing-entry/${name}`);
     } catch (err: any) {
-      setSaveError(err?.message ?? "Failed to queue closing entry");
+      if (err?.offline) {
+        setSaveError(
+          err?.message ??
+            "You are offline. Closing entry requires an internet connection.",
+        );
+      } else {
+        setSaveError(
+          err?.messages?.[0] ?? err?.message ?? "Failed to create closing entry",
+        );
+      }
     } finally {
       setIsSaving(false);
     }
@@ -255,11 +250,8 @@ export function useClosingEntryData(): ClosingEntryData {
   return {
     openingName,
     company,
-    setCompany,
     posProfile,
-    setPosProfile,
     cashier,
-    setCashier,
     periodStart,
     periodEnd,
     setPeriodEnd,
@@ -267,13 +259,10 @@ export function useClosingEntryData(): ClosingEntryData {
     setPostingDate,
     postingTime,
     setPostingTime,
-    posInvoices,
-    salesInvoices,
+    redemptions,
     payments,
-    taxes,
     totals,
     isLoadingData,
-    fetchError,
     loadData,
     handleClosingChange,
     isSaving,

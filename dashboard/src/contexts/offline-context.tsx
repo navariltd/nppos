@@ -20,9 +20,11 @@ interface OfflineContextValue {
   pendingCount: number;
   lastSync?: string;
   syncError?: string;
-  /** Call nppos.sync_api.sync_pull and populate the local DB. */
-  initialSync: () => Promise<{ voucherCount: number; stockCount: number }>;
-  /** Queue a local offline redemption; pushes automatically when online. */
+  /** Fetch active vouchers + stock balance via a normal query and populate the local DB. */
+  initialSync: (
+    warehouse?: string,
+  ) => Promise<{ voucherCount: number; stockCount: number }>;
+  /** Queue a redemption locally only (works fully offline, no sync push). */
   queueRedemption: (params: {
     kind: "cash_payment" | "goods_issue";
     voucherNo: string;
@@ -33,8 +35,12 @@ interface OfflineContextValue {
     warehouse?: string;
     voucherSnapshot?: Record<string, any>;
   }) => ReturnType<typeof syncEngine.queueRedemption>;
-  /** Force push pending items now (e.g. on reconnect or manual button). */
-  syncNow: () => Promise<void>;
+  /** Refresh local voucher/stock data when online (no server push). */
+  syncNow: (warehouse?: string) => Promise<void>;
+  /** Toggle simulated offline mode (for testing offline UX). */
+  toggleSimulateOffline: () => Promise<boolean>;
+  /** Whether simulated offline mode is currently active. */
+  isSimulatedOffline: boolean;
   /** Throws a friendly error if the device is offline. Call before network ops. */
   requireOnline: () => void;
   /** Reset local offline DB (e.g. logout) */
@@ -69,18 +75,28 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const [pendingCount, setPendingCount] = React.useState(0);
   const [lastSync, setLastSync] = React.useState<string | undefined>();
   const [syncError, setSyncError] = React.useState<string | undefined>();
+  const [isSimulatedOffline, setIsSimulatedOffline] = React.useState(
+    typeof window !== "undefined" ? () => syncEngine.isSimulatingOffline() : false,
+  );
 
-  // Wire the raw frappe calls to the sync engine.
-  const { call: pullCall } = useFrappePostCall("nppos.sync_api.sync_pull");
-  const { call: pushCall } = useFrappePostCall("nppos.sync_api.sync_push");
+  // Wire standard frappe client methods to the sync engine. No custom backend
+  // API and no sync protocol — the engine queries vouchers + stock balance via
+  // get_list, and fetches full BOM documents (with their child items table) via
+  // frappe.client.get.
+  const { call: getList } = useFrappePostCall("frappe.client.get_list");
+  const { call: getDoc } = useFrappePostCall("frappe.client.get");
+  const { call: insertDoc } = useFrappePostCall("frappe.client.insert");
+  const { call: saveDoc } = useFrappePostCall("frappe.desk.form.save.savedocs");
 
   React.useEffect(() => {
     syncEngine.setApiCallbacks({
-      pull: (params) => pullCall(params),
-      push: (params) => pushCall(params),
+      getList: (params) => getList(params),
+      getDoc: (params) => getDoc(params),
+      insert: (params) => insertDoc(params),
+      saveDoc: (params) => saveDoc(params),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pullCall, pushCall]);
+  }, [getList, getDoc, insertDoc, saveDoc]);
 
   // Subscribe to engine network + sync status.
   React.useEffect(() => {
@@ -123,7 +139,13 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       syncError,
       initialSync: syncEngine.initialSync.bind(syncEngine),
       queueRedemption: syncEngine.queueRedemption.bind(syncEngine),
-      syncNow: syncEngine.autoSync.bind(syncEngine),
+      syncNow: syncEngine.refresh.bind(syncEngine),
+      toggleSimulateOffline: async () => {
+        const next = await syncEngine.toggleSimulateOffline();
+        setIsSimulatedOffline(next);
+        return next;
+      },
+      isSimulatedOffline,
       requireOnline: () => {
         if (!syncEngine.isOnlineNow()) {
           const err = new Error(
@@ -135,7 +157,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       },
       resetOffline: syncEngine.reset.bind(syncEngine),
     }),
-    [isOnline, isSyncing, pendingCount, lastSync, syncError],
+    [isOnline, isSyncing, pendingCount, lastSync, syncError, isSimulatedOffline],
   );
 
   return (
@@ -161,8 +183,8 @@ export function OfflineWarning() {
     <div className="bg-amber-500/15 border border-amber-500/40 text-amber-700 dark:text-amber-300 rounded-md px-4 py-3 text-sm mb-4 flex items-center gap-2">
       <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
       <span>
-        You are offline. Data shown here may be from the last sync. Online-only
-        actions are unavailable until you reconnect.
+        You are offline. Data shown here may be from the last refresh.
+        Redemptions can still be recorded and will be stored locally.
       </span>
     </div>
   );

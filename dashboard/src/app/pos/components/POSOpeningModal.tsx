@@ -20,6 +20,8 @@ export function POSOpeningModal({ onSuccess }: POSOpeningModalProps) {
   const { post: createOpeningVoucher } = callPost(
     "erpnext.selling.page.point_of_sale.point_of_sale.create_opening_voucher",
   );
+  const { post: setValue } = callPost("frappe.client.set_value");
+  const { post: getOpeningDoc } = callPost("frappe.client.get");
 
   const { data: posProfileDoc } = getDoc(
     "POS Profile",
@@ -59,6 +61,7 @@ export function POSOpeningModal({ onSuccess }: POSOpeningModalProps) {
 
       const openingVoucherData = {
         pos_profile: posProfile,
+        enable_entitlement_distribution: 1,
         company: company,
         balance_details: JSON.stringify(
           openingBalances.map((balance, index) => ({
@@ -68,7 +71,31 @@ export function POSOpeningModal({ onSuccess }: POSOpeningModalProps) {
         ),
       };
 
-      await createOpeningVoucher(openingVoucherData);
+      const createRes: any = await createOpeningVoucher(openingVoucherData);
+      const createdName =
+        createRes?.message?.name ??
+        createRes?.message ??
+        createRes?.name ??
+        null;
+
+      // Ensure enable_entitlement_distribution is 1 on the created opening
+      // entry (ERPNext may not persist it in some paths). Fetch it and force
+      // it to 1 + save if it came back 0/false.
+      if (createdName) {
+        const openingRes: any = await getOpeningDoc({
+          doctype: "POS Opening Entry",
+          name: createdName,
+        });
+        const opening = openingRes?.message ?? openingRes ?? {};
+        if (opening.name && opening.enable_entitlement_distribution !== 1) {
+          await setValue({
+            doctype: "POS Opening Entry",
+            name: opening.name,
+            fieldname: "enable_entitlement_distribution",
+            value: 1,
+          });
+        }
+      }
 
       onSuccess();
     } catch (error: any) {

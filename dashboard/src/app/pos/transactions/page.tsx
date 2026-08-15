@@ -1,15 +1,15 @@
 /**
- * TransactionsPage – Entitlement Redemption list view with filtering and search.
+ * RedemptionsPage – Entitlement Redemption list view with filtering, search,
+ * correct status display and a click-to-open detail sheet.
  *
- * Offline-first: when online uses the generic DocTypeList (network). When offline
- * reads the local Dexie redemptions table (synced + pending) so the agent can
- * review their transaction history without connectivity.
+ * Offline-first: reads the local Dexie redemptions table (synced + pending +
+ * failed) so the agent can review their redemption history without connectivity.
  */
-
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { usePOS } from "@/contexts/pos-context";
 
 import { Loader2 } from "lucide-react";
 
@@ -36,18 +36,52 @@ function fmt(val: number | null | undefined): string {
   }).format(val);
 }
 
+/** Badge variant based on sync status. */
+function statusVariant(status: string | undefined) {
+  switch (status) {
+    case "synced":
+      return "outline" as const;
+    case "pending":
+      return "secondary" as const;
+    case "failed":
+      return "destructive" as const;
+    default:
+      return "outline" as const;
+  }
+}
+
+/** Human-readable status label. */
+function statusLabel(status: string | undefined) {
+  switch (status) {
+    case "synced":
+      return "Synced";
+    case "pending":
+      return "Pending";
+    case "failed":
+      return "Failed";
+    default:
+      return "Local";
+  }
+}
+
 /**
- * TransactionsPage – lists local Entitlement Redemptions with optional
- * voucher and search filtering. Reads the local Dexie table (offline-first).
+ * RedemptionsPage – lists local Entitlement Redemptions with optional voucher
+ * and search filtering. Reads the local Dexie table (offline-first).
  *
- * @returns {JSX.Element} the transactions table
+ * @returns {JSX.Element} the redemptions table + detail sheet
  */
-export default function TransactionsPage() {
+export default function RedemptionsPage() {
+  const navigate = useNavigate();
+  const { posOpeningEntry } = usePOS();
+  const openingRow = Array.isArray(posOpeningEntry) ? posOpeningEntry[0] : null;
+  const openingName = openingRow?.name ?? "";
   const [searchParams] = useSearchParams();
   const voucherFilter = searchParams.get("entitlement_voucher");
   const searchFilter = searchParams.get("s") || "";
 
-  const title = voucherFilter ? `Redemptions for ${voucherFilter}` : "Transactions";
+  const title = voucherFilter
+    ? `Redemptions for ${voucherFilter}`
+    : "Redemptions";
 
   // Offline: read local redemptions from Dexie.
   const [localRedemptions, setLocalRedemptions] = useState<any[]>([]);
@@ -58,17 +92,26 @@ export default function TransactionsPage() {
     setLoading(true);
     redemptionRepo.getAll().then((all: OfflineRedemption[]) => {
       if (cancelled) return;
-      let rows = all.map((r) => ({
+      // Only show redemptions for the current POS session.
+      let rows = all
+        .filter((r) => r.posSession === openingName)
+        .map((r) => ({
         id: r.id,
-        name: r.id,
+        name: r.serverName || r.id,
         entitlement_voucher: r.voucherNo,
         entitlement_type: r.entitlementType,
         amount: r.amount ?? 0,
         qty: r.qty ?? 0,
         party: r.voucherSnapshot?.party ?? "",
+        item: r.voucherSnapshot?.item ?? "",
         posting_date: r.createdAt.slice(0, 10),
+        createdAt: r.createdAt,
         syncStatus: r.syncStatus,
-      }));
+        posSession: r.posSession,
+        warehouse: r.warehouse,
+        serverName: r.serverName,
+          lastError: r.lastError,
+        }));
       if (voucherFilter) {
         rows = rows.filter((r) => r.entitlement_voucher === voucherFilter);
       }
@@ -87,7 +130,7 @@ export default function TransactionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [voucherFilter, searchFilter]);
+  }, [voucherFilter, searchFilter, openingName]);
 
   return (
     <div className="space-y-6 px-0">
@@ -118,25 +161,13 @@ export default function TransactionsPage() {
               </TableHeader>
               <TableBody>
                 {localRedemptions.map((r) => (
-                  <TableRow key={r.id}>
+                  <TableRow
+                    key={r.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => navigate(`/pos/transactions/${r.id}`)}
+                  >
                     <TableCell className="px-4 font-medium text-xs">
-                      {r.syncStatus === "synced" ? (
-                        r.name
-                      ) : (
-                        <span className="flex items-center gap-1">
-                          {r.name}
-                          <Badge
-                            variant={
-                              r.syncStatus === "failed"
-                                ? "destructive"
-                                : "secondary"
-                            }
-                            className="text-[9px]"
-                          >
-                            {r.syncStatus}
-                          </Badge>
-                        </span>
-                      )}
+                      {r.name}
                     </TableCell>
                     <TableCell className="text-xs">
                       {r.entitlement_voucher || "—"}
@@ -152,12 +183,10 @@ export default function TransactionsPage() {
                         : `${r.qty || 0} pcs`}
                     </TableCell>
                     <TableCell className="text-xs">{r.posting_date}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground capitalize">
-                      {r.syncStatus === "synced"
-                        ? "Synced"
-                        : r.syncStatus === "failed"
-                          ? "Failed (will retry)"
-                          : "Pending sync"}
+                    <TableCell className="text-xs">
+                      <Badge variant={statusVariant(r.syncStatus)}>
+                        {statusLabel(r.syncStatus)}
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -166,6 +195,7 @@ export default function TransactionsPage() {
           )}
         </CardContent>
       </Card>
+
     </div>
   );
 }

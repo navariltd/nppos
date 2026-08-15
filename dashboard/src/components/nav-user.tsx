@@ -1,7 +1,16 @@
 "use client";
 
-import { BellDot, CircleUser, EllipsisVertical, LogOut, Palette } from "lucide-react";
+import {
+  BellDot,
+  CircleUser,
+  CloudOff,
+  EllipsisVertical,
+  LogOut,
+  Palette,
+  RefreshCw,
+} from "lucide-react";
 import { useNotifications } from "@/contexts/notification-context";
+import { useOffline } from "@/contexts/offline-context";
 import { Link, useNavigate } from "react-router-dom";
 
 import { Logo } from "@/components/logo";
@@ -38,7 +47,10 @@ export function NavUser({
   const navigate = useNavigate();
   const { logout } = useFrappeAuth();
   const { unreadCount } = useNotifications();
+  const { isOnline, isSyncing, syncNow, toggleSimulateOffline, isSimulatedOffline } =
+    useOffline();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isSyncingNow, setIsSyncingNow] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -113,6 +125,40 @@ export function NavUser({
                   Customize Theme
                 </DropdownMenuItem>
               )}
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onSelect={(e) => {
+                  e.preventDefault();
+                  void toggleSimulateOffline();
+                }}
+                data-state={isSimulatedOffline ? "checked" : undefined}
+              >
+                <CloudOff />
+                <span>Simulate Offline</span>
+                <span
+                  className={`ml-auto inline-flex h-4 w-8 items-center rounded-full p-0.5 transition-colors ${
+                    isSimulatedOffline ? "bg-amber-500" : "bg-muted"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${
+                      isSimulatedOffline ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer"
+                disabled={!isOnline || isSyncing || isSyncingNow || isSimulatedOffline}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setIsSyncingNow(true);
+                  void syncNow().finally(() => setIsSyncingNow(false));
+                }}
+              >
+                <RefreshCw className={isSyncing || isSyncingNow ? "animate-spin" : ""} />
+                Sync Data
+              </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild className="cursor-pointer">

@@ -1,7 +1,7 @@
 /**
- * IssueEntitlement – creates a LOCAL Entitlement Redemption duplicate that works
- * fully offline (the source of truth), then queues it for push via sync_push.
- * When online it auto-syncs; when offline it stays as `pending`.
+ * IssueEntitlement – creates a LOCAL Entitlement Redemption record that works
+ * fully offline. It is stored locally only (never pushed to the server);
+ * redemption actions are allowed even when offline.
  */
 
 "use client";
@@ -28,18 +28,22 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOffline } from "@/contexts/offline-context";
 import { usePOS } from "@/contexts/pos-context";
-import { redemptionRepo, voucherRepo } from "@/lib/offline/repository";
 import type { OfflineRedemption, OfflineVoucher } from "@/lib/offline/db";
+import { redemptionRepo, stockRepo, voucherRepo } from "@/lib/offline/repository";
 
 /** Format a number as Kenyan Shillings, or an em-dash when null/undefined. */
 function fmt(val: number | null | undefined): string {
   if (val == null) return "—";
-  return new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", minimumFractionDigits: 0 }).format(val);
+  return new Intl.NumberFormat("en-KE", {
+    style: "currency",
+    currency: "KES",
+    minimumFractionDigits: 0,
+  }).format(val);
 }
 
 /**
- * IssueEntitlement – creates a LOCAL Entitlement Redemption that works fully
- * offline, then queues it for push via sync_push (auto-syncs when online).
+ * IssueEntitlement – creates a LOCAL Entitlement Redemption record that works
+ * fully offline. It is stored locally only; no server push is performed.
  *
  * @returns {JSX.Element} the redemption form
  */
@@ -52,13 +56,15 @@ export default function IssueEntitlement() {
   const { posOpeningEntry } = usePOS();
 
   const openingName = Array.isArray(posOpeningEntry)
-    ? posOpeningEntry[0]?.name ?? ""
-    : posOpeningEntry?.name ?? "";
+    ? (posOpeningEntry[0]?.name ?? "")
+    : (posOpeningEntry?.name ?? "");
 
   const [redeemAmount, setRedeemAmount] = useState<string>("");
   const [redeemQty, setRedeemQty] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [hamperBalance, setHamperBalance] = useState<number>(0);
+  const [balanceChecked, setBalanceChecked] = useState(false);
 
   // Voucher ALWAYS comes from the local Dexie DB (offline-first source of truth).
   const [voucher, setVoucher] = useState<any>(null);
@@ -99,9 +105,23 @@ export default function IssueEntitlement() {
         setLocalRedemptions(all.filter((r) => r.voucherNo === name));
       });
     }
+    setBalanceChecked(false);
   }, [voucherName]);
 
   const isCash = voucher?.entitlement_type === "Cash";
+
+  // Determine available hamper balance for goods (block redemption if none).
+  useEffect(() => {
+    if (!voucher || isCash) return;
+    const item = voucher.item;
+    if (!item) return;
+    stockRepo.getAll().then((all) => {
+      const row = all.find((s) => s.hamper_id === item);
+      setHamperBalance(row?.on_hand ?? 0);
+      setBalanceChecked(true);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voucher, isCash]);
 
   const totalAmount = voucher?.amount || 0;
   const totalQty = voucher?.qty || 0;
@@ -118,8 +138,12 @@ export default function IssueEntitlement() {
 
   const parsedAmount = parseFloat(redeemAmount) || 0;
   const parsedQty = parseFloat(redeemQty) || 0;
-  const isValidAmount = isCash ? parsedAmount > 0 && parsedAmount <= remainingAmount : true;
-  const isValidQty = !isCash ? parsedQty > 0 && parsedQty <= remainingQty : true;
+  const isValidAmount = isCash
+    ? parsedAmount > 0 && parsedAmount <= remainingAmount
+    : true;
+  const isValidQty = !isCash
+    ? parsedQty > 0 && parsedQty <= remainingQty && hamperBalance > 0
+    : true;
   const canSubmit = isCash ? isValidAmount : isValidQty;
 
   useEffect(() => {
@@ -132,7 +156,7 @@ export default function IssueEntitlement() {
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      // ALWAYS create the local redemption (offline-first), pushing when online.
+      // ALWAYS create the local redemption (offline-first, local-only).
       await queueRedemption({
         kind: isCash ? "cash_payment" : "goods_issue",
         voucherNo: voucherName,
@@ -165,7 +189,8 @@ export default function IssueEntitlement() {
           party_bank_account_name: voucher.party_bank_account_name,
           party_bank_account_no: voucher.party_bank_account_no,
           sales_partner: voucher.sales_partner,
-          amount_eligible_for_commission: voucher.amount_eligible_for_commission,
+          amount_eligible_for_commission:
+            voucher.amount_eligible_for_commission,
           commission_rate: voucher.commission_rate,
           total_commission: voucher.total_commission,
           rate: voucher.rate,
@@ -176,9 +201,7 @@ export default function IssueEntitlement() {
       });
 
       toast.success(
-        isOnline
-          ? "Redemption recorded and will sync."
-          : "Redemption recorded offline. It will sync when you reconnect.",
+        isOnline ? "Redemption recorded." : "Redemption recorded offline.",
       );
       navigate(`/pos/search?voucher=${voucherName}`);
     } catch (err: any) {
@@ -189,17 +212,52 @@ export default function IssueEntitlement() {
     }
   };
 
-  if (loading) return <div className="px-4 lg:px-6 space-y-6 pb-8"><Skeleton className="h-40 w-full rounded-lg" /><Skeleton className="h-60 w-full rounded-lg" /></div>;
+  if (loading)
+    return (
+      <div className="px-4 lg:px-6 space-y-6 pb-8">
+        <Skeleton className="h-40 w-full rounded-lg" />
+        <Skeleton className="h-60 w-full rounded-lg" />
+      </div>
+    );
 
-  if (!voucher) return <div className="px-4 lg:px-6 space-y-6 pb-8"><Card><CardContent className="pt-6"><p className="text-muted-foreground">No voucher found in local data. Use Search to find a voucher first.</p><Button variant="outline" className="mt-4" onClick={() => navigate("/pos/search")}><ArrowLeft className="h-4 w-4 mr-2" /> Back to Search</Button></CardContent></Card></div>;
+  if (!voucher)
+    return (
+      <div className="px-4 lg:px-6 space-y-6 pb-8">
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-muted-foreground">
+              No voucher found in local data. Use Search to find a voucher
+              first.
+            </p>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => navigate("/pos/search")}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" /> Back to Search
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
 
   return (
     <div className="px-4 lg:px-6 space-y-6 pb-8">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/pos/search")}><ArrowLeft className="h-5 w-5" /></Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => navigate("/pos/search")}
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
         <div className="flex flex-col">
-          <h1 className="text-2xl font-bold tracking-tight">{isCash ? "Issue Cash Entitlement" : "Issue Goods / Hampers"}</h1>
-          <p className="text-muted-foreground">Voucher: {voucher.voucher_number || voucher.name}</p>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {isCash ? "Issue Cash Entitlement" : "Issue Goods / Hampers"}
+          </h1>
+          <p className="text-muted-foreground">
+            Voucher: {voucher.voucher_number || voucher.name}
+          </p>
         </div>
       </div>
 
@@ -208,9 +266,11 @@ export default function IssueEntitlement() {
           <CardContent className="pt-6 flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
             <div>
-              <p className="font-medium text-amber-700 dark:text-amber-300">You are offline</p>
+              <p className="font-medium text-amber-700 dark:text-amber-300">
+                You are offline
+              </p>
               <p className="text-sm text-muted-foreground">
-                This redemption will be saved locally and synced when you reconnect.
+                This redemption will be recorded locally.
               </p>
             </div>
           </CardContent>
@@ -218,19 +278,48 @@ export default function IssueEntitlement() {
       )}
 
       <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2 text-lg">{isCash ? <Banknote className="h-5 w-5 text-green-500" /> : <Package className="h-5 w-5 text-blue-500" />} Voucher Summary</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            {isCash ? (
+              <Banknote className="h-5 w-5 text-green-500" />
+            ) : (
+              <Package className="h-5 w-5 text-blue-500" />
+            )}{" "}
+            Voucher Summary
+          </CardTitle>
+        </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="space-y-1"><p className="text-xs text-muted-foreground">Party</p><p className="font-medium">{voucher.party || "—"}</p></div>
-          <div className="space-y-1"><p className="text-xs text-muted-foreground">Status</p><Badge variant="secondary">Local</Badge></div>
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Party</p>
+            <p className="font-medium">{voucher.party || "—"}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Status</p>
+            <Badge variant="secondary">Local</Badge>
+          </div>
           {isCash ? (
             <>
-              <div className="space-y-1"><p className="text-xs text-muted-foreground">Total Amount</p><p className="font-semibold">{fmt(totalAmount)}</p></div>
-              <div className="space-y-1"><p className="text-xs text-muted-foreground">Remaining</p><p className="font-bold text-green-600">{fmt(remainingAmount)}</p></div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Total Amount</p>
+                <p className="font-semibold">{fmt(totalAmount)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Remaining</p>
+                <p className="font-bold text-green-600">
+                  {fmt(remainingAmount)}
+                </p>
+              </div>
             </>
           ) : (
             <>
-              <div className="space-y-1"><p className="text-xs text-muted-foreground">Total Qty</p><p className="font-semibold">{totalQty}</p></div>
-              <div className="space-y-1"><p className="text-xs text-muted-foreground">Remaining</p><p className="font-bold text-blue-600">{remainingQty}</p></div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Total Qty</p>
+                <p className="font-semibold">{totalQty}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Remaining</p>
+                <p className="font-bold text-blue-600">{remainingQty}</p>
+              </div>
             </>
           )}
         </CardContent>
@@ -242,53 +331,110 @@ export default function IssueEntitlement() {
             <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold text-destructive">Recording Failed</p>
-              <p className="text-sm text-destructive/80 mt-1 whitespace-pre-wrap">{submitError}</p>
+              <p className="text-sm text-destructive/80 mt-1 whitespace-pre-wrap">
+                {submitError}
+              </p>
             </div>
           </CardContent>
         </Card>
       )}
 
       <Card>
-        <CardHeader><CardTitle className="text-lg">Redemption Details</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="text-lg">Redemption Details</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-6">
           {isCash ? (
             <div className="space-y-2">
               <Label htmlFor="amount">Amount to Redeem</Label>
               <div className="flex gap-2 items-center">
                 <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">KES</span>
-                  <Input id="amount" type="number" className="pl-12" value={redeemAmount}
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                    KES
+                  </span>
+                  <Input
+                    id="amount"
+                    type="number"
+                    className="pl-12"
+                    value={redeemAmount}
                     onChange={(e) => setRedeemAmount(e.target.value)}
-                    max={remainingAmount} min={0} step={0.01} />
+                    max={remainingAmount}
+                    min={0}
+                    step={0.01}
+                  />
                 </div>
               </div>
-              {!isValidAmount && redeemAmount && <p className="text-xs text-destructive">Amount exceeds remaining balance ({fmt(remainingAmount)})</p>}
+              {!isValidAmount && redeemAmount && (
+                <p className="text-xs text-destructive">
+                  Amount exceeds remaining balance ({fmt(remainingAmount)})
+                </p>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
               <Label htmlFor="qty">Quantity to Issue</Label>
               <div className="flex gap-2 items-center">
-                <Input id="qty" type="number" value={redeemQty}
+                <Input
+                  id="qty"
+                  type="number"
+                  value={redeemQty}
                   onChange={(e) => setRedeemQty(e.target.value)}
-                  max={remainingQty} min={0} step={1} />
-                <span className="text-muted-foreground text-sm">{voucher.uom || "Nos"}</span>
+                  max={remainingQty}
+                  min={0}
+                  step={1}
+                />
+                <span className="text-muted-foreground text-sm">
+                  {voucher.uom || "Nos"}
+                </span>
               </div>
-              {!isValidQty && redeemQty && <p className="text-xs text-destructive">Quantity exceeds remaining ({remainingQty})</p>}
-              {voucher.item && <p className="text-sm text-muted-foreground">Item: {voucher.item}</p>}
+              {!isValidQty && hamperBalance <= 0 && (
+                <p className="text-xs text-destructive">
+                  No available balance to issue this item.
+                </p>
+              )}
+              {!isValidQty && redeemQty && hamperBalance > 0 && (
+                <p className="text-xs text-destructive">
+                  Quantity exceeds remaining ({remainingQty})
+                </p>
+              )}
+              {voucher.item && (
+                <p className="text-sm text-muted-foreground">
+                  Item: {voucher.item} · In stock: {hamperBalance}
+                </p>
+              )}
             </div>
           )}
 
           <div className="bg-muted/30 rounded-lg p-4 space-y-2">
             <p className="text-sm font-medium">Before you proceed:</p>
             <ul className="text-xs text-muted-foreground space-y-1">
-              <li className="flex items-start gap-2"><AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" /> Verify beneficiary details are correct</li>
-              <li className="flex items-start gap-2"><AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" /> Double-check the amount/qty before confirming</li>
+              <li className="flex items-start gap-2">
+                <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" /> Verify
+                beneficiary details are correct
+              </li>
+              <li className="flex items-start gap-2">
+                <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />{" "}
+                Double-check the amount/qty before confirming
+              </li>
             </ul>
           </div>
 
-          <Button onClick={handleSubmit} disabled={!canSubmit || isSubmitting} size="lg" className="w-full gap-2">
-            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-            {isSubmitting ? "Saving..." : isCash ? `Redeem ${fmt(parsedAmount)}` : `Issue ${parsedQty} ${voucher.uom || "Units"}`}
+          <Button
+            onClick={handleSubmit}
+            disabled={!canSubmit || isSubmitting}
+            size="lg"
+            className="w-full gap-2"
+          >
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCircle className="h-4 w-4" />
+            )}
+            {isSubmitting
+              ? "Saving..."
+              : isCash
+                ? `Redeem ${fmt(parsedAmount)}`
+                : `Issue ${parsedQty} ${voucher.uom || "Units"}`}
           </Button>
         </CardContent>
       </Card>
