@@ -3,9 +3,12 @@
  * offline-first POS pages use instead of hitting the network.
  *
  * Provides typed CRUD helpers per collection (vouchers, stock, redemptions,
- * pending outbox, meta) plus database maintenance operations.
+ * local docs, meta) plus database maintenance operations.
  */
 import db, {
+  type OfflineBeneficiary,
+  type OfflineBom,
+  type OfflineLocalDoc,
   type OfflineMeta,
   type OfflinePending,
   type OfflineRedemption,
@@ -140,7 +143,102 @@ export const redemptionRepo = {
 };
 
 /**
- * Pending outbox queue data access (docs awaiting push via sync_push).
+ * Locally-stored documents (e.g. POS Closing Entry) kept for offline records.
+ * Never pushed to the server — these are local-only working records.
+ */
+export const localDocsRepo = {
+  /** Add a locally-stored closing entry. */
+  async addClosing(data: Record<string, any>): Promise<string> {
+    const id = `closing_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    await db.localDocs.put({
+      id,
+      kind: "pos_closing",
+      data,
+      createdAt: new Date().toISOString(),
+    });
+    return id;
+  },
+
+  /** Add a locally-stored opening entry. Works fully offline. */
+  async addOpening(data: Record<string, any>): Promise<string> {
+    const id = `opening_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    await db.localDocs.put({
+      id,
+      kind: "pos_opening",
+      data,
+      createdAt: new Date().toISOString(),
+    });
+    return id;
+  },
+
+  /** Fetch all locally-stored docs, optionally by kind (newest first). */
+  async getAll(kind?: OfflineLocalDoc["kind"]): Promise<OfflineLocalDoc[]> {
+    if (kind) {
+      return db.localDocs
+        .where("kind")
+        .equals(kind)
+        .reverse()
+        .sortBy("createdAt");
+    }
+    const all = await db.localDocs.toArray();
+    return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+
+  /** Remove a locally-stored doc by id. */
+  async delete(id: string): Promise<void> {
+    await db.localDocs.delete(id);
+  },
+
+  /** Remove all locally-stored docs. */
+  async clearAll(): Promise<void> {
+    await db.localDocs.clear();
+  },
+};
+
+/**
+ * Cached Beneficiary data access for richer party details on vouchers.
+ */
+export const beneficiaryRepo = {
+  /** Idempotently insert or update a batch of beneficiaries. */
+  async bulkUpsert(rows: OfflineBeneficiary[]): Promise<void> {
+    if (rows.length === 0) return;
+    await db.beneficiaries.bulkPut(rows);
+  },
+
+  /** Fetch a beneficiary by doc name (BENE-...). */
+  async getById(id: string): Promise<OfflineBeneficiary | undefined> {
+    return db.beneficiaries.get(id);
+  },
+
+  /** Remove all cached beneficiaries. */
+  async clearAll(): Promise<void> {
+    await db.beneficiaries.clear();
+  },
+};
+
+/**
+ * Cached BOM (hamper) data access, including components.
+ */
+export const bomRepo = {
+  /** Idempotently insert or update a batch of BOMs. */
+  async bulkUpsert(rows: OfflineBom[]): Promise<void> {
+    if (rows.length === 0) return;
+    await db.boms.bulkPut(rows);
+  },
+
+  /** Fetch a BOM by hamper item code. */
+  async getById(id: string): Promise<OfflineBom | undefined> {
+    return db.boms.get(id);
+  },
+
+  /** Remove all cached BOMs. */
+  async clearAll(): Promise<void> {
+    await db.boms.clear();
+  },
+};
+
+/**
+ * Legacy pending outbox queue data access (retained for backward compat).
  */
 export const pendingRepo = {
   /** Fetch outbox entries, optionally filtered by sync status. */
@@ -244,6 +342,9 @@ export const offlineDBMaintenance = {
       db.stockBalance.clear(),
       db.redemptions.clear(),
       db.pending.clear(),
+      db.localDocs.clear(),
+      db.beneficiaries.clear(),
+      db.boms.clear(),
       db.meta.clear(),
     ]);
   },

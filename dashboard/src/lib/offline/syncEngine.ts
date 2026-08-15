@@ -1,29 +1,32 @@
 /**
- * NPPOS offline sync engine.
+ * NPPOS offline data engine.
  *
  * Responsibilities:
  *  1. Tracks online/offline state (window events) and notifies subscribers.
- *  2. `initialSync()` — calls nppos.sync_api.sync_pull and stores vouchers +
- *     stock balance into the local Dexie DB.
- *  3. `queueRedemption()` — creates a LOCAL Entitlement Redemption duplicate
- *     (with a generated client_ref idempotency key) that works fully offline.
- *  4. `autoSync()` — when online, pushes pending redemptions/closing entries via
- *     nppos.sync_api.sync_push and marks them synced/failed.
- *  5. Broadcasts sync + network status so the UI can show banners/badges.
+ *  2. `initialSync(warehouse)` — fetches active vouchers + stock balance for a
+ *     warehouse using ONLY standard frappe.client.get_list calls with filters
+ *     (no custom backend API, no sync protocol) and stores them into the local
+ *     Dexie DB.
+ *  3. `queueRedemption()` — creates a LOCAL Entitlement Redemption record that
+ *     works fully offline. It is stored locally ONLY (never pushed to the
+ *     server); redemption actions are allowed offline.
+ *  4. `refresh()` — when online, re-fetches and refreshes the local voucher +
+ *     stock snapshot. Offline redemptions remain local.
+ *  5. Broadcasts network + refresh status so the UI can show banners/badges.
  *
- * Data mapping and outbox push logic live in ./data-transform and
- * ./outbox-pusher; this class owns lifecycle + state only.
+ * Data mapping lives in ./data-transform; no outbox/remote push is performed.
  */
 import { toOfflineStock, toOfflineVoucher } from "./data-transform";
-import { flushOutbox } from "./outbox-pusher";
+import type { OfflineBom, OfflineRedemption } from "./db";
 import {
+  beneficiaryRepo,
+  bomRepo,
+  localDocsRepo,
   metaRepo,
-  pendingRepo,
   redemptionRepo,
   stockRepo,
   voucherRepo,
 } from "./repository";
-import type { OfflineRedemption } from "./db";
 
 export type NetworkStatusCallback = (online: boolean) => void;
 export type SyncStatusCallback = (status: {
@@ -37,7 +40,7 @@ export type SyncStatusCallback = (status: {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyApiCall = (params: Record<string, any>) => Promise<any>;
 
-const REFRESH_INTERVAL_MS = 60000; // refresh local data + push pending every 1 minute
+const REFRESH_INTERVAL_MS = 60000; // refresh local data every 1 minute
 
 class NPPOSSyncEngine {
   private isSyncing = false;
@@ -45,10 +48,14 @@ class NPPOSSyncEngine {
   private syncTimer: ReturnType<typeof setInterval> | null = null;
   private networkCallbacks: NetworkStatusCallback[] = [];
   private statusCallback: SyncStatusCallback | null = null;
+  // When true the engine pretends to be offline, regardless of navigator.onLine.
+  private simulateOffline = false;
 
-  // Backend callbacks wired by the React layer.
-  private pullCall: AnyApiCall | null = null;
-  private pushCall: AnyApiCall | null = null;
+  // Backend callbacks wired by the React layer (standard frappe client methods).
+  private getListCall: AnyApiCall | null = null;
+  private getDocCall: AnyApiCall | null = null;
+  private insertCall: AnyApiCall | null = null;
+  private saveDocCall: AnyApiCall | null = null;
 
   constructor() {
     if (typeof window !== "undefined") {
@@ -59,7 +66,22 @@ class NPPOSSyncEngine {
 
   // ── Network state ──────────────────────────────────────────
   isOnlineNow(): boolean {
-    return this.isOnline;
+    return !this.simulateOffline && this.isOnline;
+  }
+
+  /**
+   * Set (or unset) simulated offline mode. When enabled the engine reports
+   * offline and stops network refreshes; redemptions still work locally.
+   */
+  setSimulateOffline(enabled: boolean): void {
+    if (this.simulateOffline === enabled) return;
+    this.simulateOffline = enabled;
+    this.networkCallbacks.forEach((cb) => cb(this.isOnlineNow()));
+    this.emitStatus({});
+  }
+
+  isSimulatingOffline(): boolean {
+    return this.simulateOffline;
   }
 
   onNetworkStatus(cb: NetworkStatusCallback): () => void {
@@ -75,23 +97,23 @@ class NPPOSSyncEngine {
 
   private handleNetworkChange(online: boolean) {
     this.isOnline = online;
-    this.networkCallbacks.forEach((cb) => cb(online));
-    if (online) {
-      this.autoSync();
+    this.networkCallbacks.forEach((cb) => cb(this.isOnlineNow()));
+    if (this.isOnlineNow()) {
+      this.flushPendingRedemptions()
+        .then(() => this.refresh())
+        .catch(() => {
+          /* transient — keep cached data */
+        });
     }
   }
 
-  // Count only items still awaiting sync (pending + failed) — synced ones are
-  // excluded so the UI never shows "N pending" for already-uploaded rows.
+  // Redemptions are stored locally only, so there is never anything "pending"
+  // to report to the UI.
   private async pendingCount(): Promise<number> {
-    const pending = await pendingRepo.getAll("pending");
-    const failed = await pendingRepo.getAll("failed");
-    return pending.length + failed.length;
+    return 0;
   }
 
-  private async emitStatus(
-    extra?: Partial<Parameters<SyncStatusCallback>[0]>,
-  ) {
+  private async emitStatus(extra?: Partial<Parameters<SyncStatusCallback>[0]>) {
     this.statusCallback?.({
       syncing: this.isSyncing,
       isOnline: this.isOnline,
@@ -101,45 +123,214 @@ class NPPOSSyncEngine {
   }
 
   // ── Backend wiring ─────────────────────────────────────────
-  setApiCallbacks(params: { pull: AnyApiCall; push: AnyApiCall }) {
-    this.pullCall = params.pull;
-    this.pushCall = params.push;
+  setApiCallbacks(params: {
+    getList: AnyApiCall;
+    getDoc: AnyApiCall;
+    insert: AnyApiCall;
+    saveDoc: AnyApiCall;
+  }) {
+    this.getListCall = params.getList;
+    this.getDocCall = params.getDoc;
+    this.insertCall = params.insert;
+    this.saveDocCall = params.saveDoc;
   }
 
-  // ── Initial sync: pull vouchers + stock balance ───────────
-  async initialSync(): Promise<{ voucherCount: number; stockCount: number }> {
-    if (!this.pullCall) {
-      throw new Error("Sync engine pull callback not configured.");
+  // ── Simulate offline ───────────────────────────────────────
+  async toggleSimulateOffline(): Promise<boolean> {
+    const next = !this.simulateOffline;
+    this.setSimulateOffline(next);
+    return next;
+  }
+
+  // ── Initial data fetch: active vouchers + stock balance ────
+  // Uses ONLY standard frappe.client.get_list calls with filters — no custom
+  // backend API. Vouchers are filtered to active/partially-redeemed with a
+  // valid-from <= today and valid-to >= today (or null). Stock balance is the
+  // normal Bin (on-hand) list for the warehouse.
+  async initialSync(
+    warehouse?: string,
+  ): Promise<{ voucherCount: number; stockCount: number }> {
+    if (!this.getListCall) {
+      throw new Error("get_list callback not configured.");
     }
-    if (!this.isOnline) {
+    if (!this.isOnlineNow()) {
       throw new Error("You are offline. Connect to the internet to sync.");
     }
 
     this.emitStatus({ syncing: true });
     try {
-      const res: any = await this.pullCall({});
-      const data = res?.message ?? res ?? {};
+      // Resolve the warehouse from the locally-cached profile when not passed.
+      const wh =
+        warehouse ||
+        (await metaRepo.getValue<string>("warehouse")) ||
+        undefined;
+      const today = new Date().toISOString().slice(0, 10);
+
+      const unwrap = (res: any): any[] => {
+        const data = res?.message ?? res ?? [];
+        return Array.isArray(data) ? data : [];
+      };
+
+      // 1) Active vouchers (status + validity windows), full docs via get_list.
+      // Valid if valid_to is unset OR valid_to >= today (or_filters).
+      const voucherRes: any = await this.getListCall({
+        doctype: "Entitlement Voucher",
+        filters: [
+          ["status", "in", ["Active", "Partially Redeemed"]],
+          ["docstatus", "=", 1],
+          ["valid_from", "<=", today],
+        ],
+        or_filters: [
+          ["valid_to", "is", "not set"],
+          ["valid_to", ">=", today],
+        ],
+        fields: ["*"],
+        limit_page_length: 0,
+        order_by: "modified desc",
+      });
+      const voucherRows = unwrap(voucherRes);
+      const isGoods = (t: string) => t === "Goods";
+      const vouchers = voucherRows.map((v: any) => {
+        const normalized = {
+          id: v.name || v.voucher_number,
+          voucher_no: v.voucher_number || v.name,
+          beneficiary_no: v.party || null,
+          entitlement_type: isGoods(v.entitlement_type) ? "hamper" : "cash",
+          amount: v.amount ?? 0,
+          hamper_id: isGoods(v.entitlement_type) ? v.item : null,
+          qty: isGoods(v.entitlement_type) ? v.qty : null,
+          uom: isGoods(v.entitlement_type) ? v.uom : null,
+          rate: v.rate ?? null,
+          redeemed_amount: 0,
+          redeemed_qty: 0,
+          valid_from: v.valid_from ?? "",
+          valid_to: v.valid_to ?? null,
+          status:
+            v.status === "Partially Redeemed" ? "partially_redeemed" : "active",
+          uses_count: 0,
+          max_uses: 2,
+          project: v.project ?? "",
+          assignment_id: null,
+          doc: v, // full Entitlement Voucher document
+        };
+        return toOfflineVoucher(normalized, new Date().toISOString());
+      });
+
+      // 2) Stock balance (Bin on-hand) for the warehouse.
+      let stock: any[] = [];
+      if (wh) {
+        const stockRes: any = await this.getListCall({
+          doctype: "Bin",
+          filters: [["warehouse", "=", wh]],
+          fields: ["warehouse", "item_code", "actual_qty"],
+          limit_page_length: 0,
+        });
+        stock = unwrap(stockRes).map((s: any) =>
+          toOfflineStock({
+            warehouse: s.warehouse,
+            hamper_id: s.item_code,
+            hamper_name: s.item_code,
+            on_hand: s.actual_qty ?? 0,
+          }),
+        );
+      }
+
+      // 3) Beneficiaries for the voucher parties (richer details).
+      const beneficiaryNames = [
+        ...new Set(
+          voucherRows
+            .map((v: any) => (v.party_type === "Beneficiary" ? v.party : null))
+            .filter(Boolean),
+        ),
+      ] as string[];
+      let beneficiaries: any[] = [];
+      if (beneficiaryNames.length) {
+        const beneRes: any = await this.getListCall({
+          doctype: "Beneficiary",
+          filters: [["name", "in", beneficiaryNames]],
+          fields: [
+            "name",
+            "full_name",
+            "is_proxy",
+            "phone_number",
+            "email",
+            "id_number",
+            "beneficiary_type",
+            "status",
+            "warehouse",
+          ],
+          limit_page_length: 0,
+        });
+        const beneNow = new Date().toISOString();
+        beneficiaries = unwrap(beneRes).map((b: any) => ({
+          id: b.name,
+          full_name: b.full_name ?? b.name,
+          is_proxy: b.is_proxy ?? 0,
+          phone_number: b.phone_number ?? "",
+          email: b.email ?? "",
+          id_number: b.id_number ?? "",
+          beneficiary_type: b.beneficiary_type ?? "",
+          status: b.status ?? "",
+          warehouse: b.warehouse ?? "",
+          raw: b,
+          syncedAt: beneNow,
+        }));
+      }
+
+      // 4) BOMs (hamper components) for goods items, plus their component stock.
+      // Child tables (BOM Item) are NOT queryable via get_list, so we fetch the
+      // full BOM document via frappe.client.get and read its `items` table.
+      const hamperItemCodes = [
+        ...new Set(vouchers.map((v) => v.hamper_id).filter(Boolean)),
+      ] as string[];
+      let boms: OfflineBom[] = [];
+      if (hamperItemCodes.length && this.getDocCall) {
+        const bomRes: any = await this.getListCall({
+          doctype: "BOM",
+          filters: [
+            ["item", "in", hamperItemCodes],
+            ["is_default", "=", 1],
+            ["is_active", "=", 1],
+          ],
+          fields: ["name", "item"],
+          limit_page_length: 0,
+        });
+        const bomRows = unwrap(bomRes);
+        const bomNow = new Date().toISOString();
+        for (const bom of bomRows) {
+          const docRes: any = await this.getDocCall({
+            doctype: "BOM",
+            name: bom.name,
+          });
+          const doc = docRes?.message ?? docRes ?? {};
+          const items = Array.isArray(doc.items) ? doc.items : [];
+          const components = items.map((c: any) => ({
+            item_code: c.item_code,
+            item_name: c.item_name ?? c.item_code,
+            qty: c.qty ?? 0,
+            uom: c.uom ?? "",
+          }));
+          boms.push({
+            id: doc.item || bom.item,
+            name: doc.name || bom.name,
+            item_name: doc.item_name || doc.item || bom.item,
+            components,
+            syncedAt: bomNow,
+          });
+        }
+      }
 
       const now = new Date().toISOString();
-      const vouchers = Array.isArray(data.vouchers)
-        ? data.vouchers.map((v: any) => toOfflineVoucher(v, now))
-        : [];
-      const stock = Array.isArray(data.agent_stock)
-        ? data.agent_stock.map((s: any) => toOfflineStock(s))
-        : [];
-
-      // Cache pos profiles + cursors for future delta syncs, and the pull time.
-      if (data.pos_profiles) {
-        await metaRepo.set("pos_profiles", data.pos_profiles);
-      }
-      if (data.cursors) {
-        await metaRepo.set("cursors", data.cursors);
+      if (wh) {
+        await metaRepo.set("warehouse", wh);
       }
       await metaRepo.set("last_pull", now);
 
       // Upsert into offline DB (idempotent).
       await voucherRepo.bulkUpsert(vouchers);
       await stockRepo.bulkUpsert(stock);
+      await beneficiaryRepo.bulkUpsert(beneficiaries);
+      await bomRepo.bulkUpsert(boms);
 
       this.emitStatus({ syncing: false, lastSync: now });
 
@@ -151,7 +342,99 @@ class NPPOSSyncEngine {
     }
   }
 
-  // ── Local offline redemption (queue + store) ──────────────
+  // Refresh local voucher/stock data when online (optionally for a warehouse).
+  async refresh(warehouse?: string): Promise<void> {
+    if (this.isSyncing || !this.isOnlineNow() || !this.getListCall) return;
+    const wh = warehouse || (await metaRepo.getValue<string>("warehouse"));
+    this.isSyncing = true;
+    this.emitStatus({ syncing: true });
+    try {
+      await this.initialSync(wh);
+      this.emitStatus({ syncing: false, lastSync: new Date().toISOString() });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Sync failed";
+      this.emitStatus({ syncing: false, error: msg });
+    } finally {
+      this.isSyncing = false;
+    }
+  }
+
+  // ── Redemption: online push / offline outbox ──────────────
+  private buildRedemptionDoc(params: {
+    voucherNo: string;
+    entitlementType: "Cash" | "Goods";
+    amount?: number;
+    qty?: number;
+    posSession?: string;
+    warehouse?: string;
+  }): Record<string, any> {
+    const doc: Record<string, any> = {
+      doctype: "Entitlement Redemption",
+      entitlement_voucher: params.voucherNo,
+      entitlement_type: params.entitlementType,
+      posting_date: new Date().toISOString().slice(0, 10),
+    };
+    if (params.entitlementType === "Cash") {
+      doc.amount = params.amount ?? 0;
+    } else {
+      doc.qty = params.qty ?? 0;
+      if (params.warehouse) doc.warehouse = params.warehouse;
+    }
+    if (params.posSession) doc.pos_opening_entry = params.posSession;
+    return doc;
+  }
+
+  /**
+   * Push a redemption to the server now. Inserts the Draft doc, re-fetches the
+   * full document (with all fields + `modified`), then submits it via
+   * frappe.desk.form.save.savedocs with action="Submit".
+   */
+  private async pushRedemptionNow(params: {
+    voucherNo: string;
+    entitlementType: "Cash" | "Goods";
+    amount?: number;
+    qty?: number;
+    posSession?: string;
+    warehouse?: string;
+  }): Promise<string> {
+    if (!this.insertCall || !this.saveDocCall || !this.getDocCall) {
+      throw new Error("insert/saveDoc/getDoc callbacks not configured.");
+    }
+    const doc = this.buildRedemptionDoc(params);
+    const insertRes: any = await this.insertCall({ doc });
+    const name =
+      insertRes?.message?.name ?? insertRes?.message ?? insertRes?.name;
+    if (!name) throw new Error("Failed to create Entitlement Redemption.");
+
+    // Re-fetch the full document (includes `modified`, so savedocs Submit's
+    // check_if_latest passes).
+    const freshRes: any = await this.getDocCall({
+      doctype: "Entitlement Redemption",
+      name,
+    });
+    const freshDoc = freshRes?.message ?? freshRes ?? {};
+    if (!freshDoc?.name) {
+      throw new Error("Failed to fetch Entitlement Redemption.");
+    }
+
+    // Submit via frappe.desk.form.save.savedocs with the full doc + Submit action.
+    const saveRes: any = await this.saveDocCall({
+      doc: JSON.stringify(freshDoc),
+      action: "Submit",
+    });
+    return (
+      saveRes?.message?.doc?.name ??
+      saveRes?.doc?.name ??
+      saveRes?.message ??
+      name
+    );
+  }
+
+  /**
+   * Queue a redemption. When online it is pushed to the server immediately
+   * (and stored locally as synced). When offline it is stored locally as
+   * `pending` and re-pushed automatically when the connection returns.
+   */
   async queueRedemption(params: {
     kind: "cash_payment" | "goods_issue";
     voucherNo: string;
@@ -178,65 +461,66 @@ class NPPOSSyncEngine {
       retryCount: 0,
     };
 
-    // Persist the local redemption record (works fully offline).
+    // Persist the local record first (source of truth, fully offline).
     await redemptionRepo.add(red);
 
-    // Also enqueue an idempotent outbox entry for push when online.
-    await pendingRepo.enqueue({
-      kind: params.kind,
-      clientRef: id, // idempotency key == local redemption id
-      payload: {
-        kind: params.kind,
-        voucherNo: params.voucherNo,
-        ...(params.amount !== undefined ? { amount: params.amount } : {}),
-        ...(params.qty !== undefined ? { qty: params.qty } : {}),
-        ...(params.posSession ? { posSession: params.posSession } : {}),
-        ...(params.warehouse ? { warehouse: params.warehouse } : {}),
-      },
-    });
-
-    // Push immediately when online — no waiting for the next interval.
-    if (this.isOnline) {
-      await this.autoSync().catch(() => {
-        // If the immediate push fails, it stays queued and retries via autoSync.
-      });
+    if (this.isOnlineNow()) {
+      try {
+        const serverName = await this.pushRedemptionNow(params);
+        await redemptionRepo.markSynced(id, serverName);
+        red.syncStatus = "synced";
+        red.serverName = serverName;
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : "Push failed";
+        await redemptionRepo.markFailed(id, msg);
+        red.syncStatus = "failed";
+      }
     }
 
     this.emitStatus({});
     return red;
   }
 
-  // ── Auto-sync pending items ───────────────────────────────
-  async autoSync(): Promise<void> {
-    if (this.isSyncing || !this.isOnline || !this.pushCall) return;
-
-    this.isSyncing = true;
-    this.emitStatus({ syncing: true });
-
-    try {
-      await flushOutbox(this.pushCall);
-      this.emitStatus({ syncing: false, lastSync: new Date().toISOString() });
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : "Sync failed";
-      this.emitStatus({ syncing: false, error: msg });
-    } finally {
-      this.isSyncing = false;
+  /** Re-push any locally-pending/failed redemptions when back online. */
+  private async flushPendingRedemptions(): Promise<void> {
+    if (!this.isOnlineNow()) return;
+    const [pending, failed] = await Promise.all([
+      redemptionRepo.getAll("pending"),
+      redemptionRepo.getAll("failed"),
+    ]);
+    const toPush = [...pending, ...failed].filter((r) => r.retryCount < 5);
+    for (const r of toPush) {
+      try {
+        const serverName = await this.pushRedemptionNow({
+          voucherNo: r.voucherNo,
+          entitlementType: r.entitlementType,
+          amount: r.amount,
+          qty: r.qty,
+          posSession: r.posSession,
+          warehouse: r.warehouse,
+        });
+        await redemptionRepo.markSynced(r.id, serverName);
+      } catch {
+        await redemptionRepo.markFailed(
+          r.id,
+          "Push failed; will retry automatically.",
+        );
+      }
     }
   }
 
   // ── Auto-refresh / interval ───────────────────────────────
-  // Pushes pending redemptions/closings AND refreshes the local voucher +
-  // stock snapshot every minute (60s) while online.
+  // Flushes pending redemptions and refreshes cached data every minute while
+  // online.
   startAutoSync() {
     if (this.syncTimer) return;
     this.syncTimer = setInterval(() => {
-      if (this.isOnline) {
-        this.autoSync().then(() => {
-          // Refresh the local data (full docs) every minute if online.
-          this.initialSync().catch(() => {
-            /* offline/transient — keep cached data */
+      if (this.isOnlineNow()) {
+        this.flushPendingRedemptions()
+          .then(() => this.refresh())
+          .catch(() => {
+            /* transient — keep cached data */
           });
-        });
       }
     }, REFRESH_INTERVAL_MS);
   }
@@ -256,9 +540,11 @@ class NPPOSSyncEngine {
   async reset() {
     this.stopAutoSync();
     await redemptionRepo.clearAll();
-    await pendingRepo.clearAll();
     await voucherRepo.clearAll();
     await stockRepo.clearAll();
+    await localDocsRepo.clearAll();
+    await beneficiaryRepo.clearAll();
+    await bomRepo.clearAll();
     await metaRepo.clearAll();
   }
 }
