@@ -17,8 +17,19 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOffline } from "@/contexts/offline-context";
 import { usePOS } from "@/contexts/pos-context";
-import { redemptionRepo, voucherRepo } from "@/lib/offline/repository";
-import type { OfflineRedemption, OfflineVoucher } from "@/lib/offline/db";
+import type {
+  OfflineBeneficiary,
+  OfflineBom,
+  OfflineRedemption,
+  OfflineVoucher,
+} from "@/lib/offline/db";
+import {
+  beneficiaryRepo,
+  bomRepo,
+  redemptionRepo,
+  stockRepo,
+  voucherRepo,
+} from "@/lib/offline/repository";
 import CameraScanner from "./components/CameraScanner";
 import SearchBar from "./components/SearchBar";
 import VoucherDetails from "./components/VoucherDetails";
@@ -52,6 +63,10 @@ export default function SearchVoucher() {
   const [localVouchers, setLocalVouchers] = useState<any[]>([]);
   const [localLoading, setLocalLoading] = useState(false);
   const [localRedemptions, setLocalRedemptions] = useState<any[]>([]);
+  const [selectedBeneficiary, setSelectedBeneficiary] =
+    useState<OfflineBeneficiary | null>(null);
+  const [selectedBom, setSelectedBom] = useState<OfflineBom | null>(null);
+  const [hamperBalance, setHamperBalance] = useState<number>(0);
 
   const q = searchedQuery;
 
@@ -84,9 +99,7 @@ export default function SearchVoucher() {
 
   const allVouchers = localVouchers;
   const showAsList =
-    searchMode === "beneficiary" &&
-    allVouchers.length > 1 &&
-    !selectedVoucher;
+    searchMode === "beneficiary" && allVouchers.length > 1 && !selectedVoucher;
 
   const activeVoucher =
     selectedVoucher || (!showAsList ? allVouchers[0] : null);
@@ -116,10 +129,63 @@ export default function SearchVoucher() {
 
   const redemptions = localRedemptions;
   const isCash = activeVoucher?.entitlement_type === "Cash";
+
+  // Load richer details for the selected voucher: beneficiary, BOM components,
+  // and available hamper balance.
+  useEffect(() => {
+    if (!voucherName || !activeVoucher) {
+      setSelectedBeneficiary(null);
+      setSelectedBom(null);
+      setHamperBalance(0);
+      return;
+    }
+    const name = voucherName;
+    const party = activeVoucher.party;
+
+    // Beneficiary details
+    if (party && activeVoucher.party_type === "Beneficiary") {
+      beneficiaryRepo
+        .getById(party)
+        .then((b) => setSelectedBeneficiary(b ?? null));
+    } else {
+      setSelectedBeneficiary(null);
+    }
+
+    // BOM (hamper) components + available hamper balance for goods vouchers.
+    const hamperId = activeVoucher.item;
+    if (hamperId) {
+      bomRepo.getById(hamperId).then((bom) => setSelectedBom(bom ?? null));
+      stockRepo.getAll().then((all) => {
+        const row = all.find((s) => s.hamper_id === hamperId);
+        setHamperBalance(row?.on_hand ?? 0);
+      });
+    } else {
+      setSelectedBom(null);
+      setHamperBalance(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voucherName]);
+
+  // Goods redemptions require available balance of the hamper item.
+  const hasGoodsBalance = isCash || hamperBalance > 0;
+
+  // A voucher is redeemable (online or offline) when it is active or partially
+  // redeemed and its validity window includes today.
+  const voucherDate = new Date().toISOString().slice(0, 10);
+  const validFrom = activeVoucher?.valid_from
+    ? String(activeVoucher.valid_from).slice(0, 10)
+    : "";
+  const validTo = activeVoucher?.valid_to
+    ? String(activeVoucher.valid_to).slice(0, 10)
+    : "";
+  const inValidity =
+    (!validFrom || validFrom <= voucherDate) &&
+    (!validTo || validTo >= voucherDate);
   const isSubmitted =
-    activeVoucher?.docstatus === 1 ||
-    activeVoucher?.status === "active" ||
-    activeVoucher?.status === "partially_redeemed";
+    (activeVoucher?.docstatus === 1 ||
+      activeVoucher?.status === "active" ||
+      activeVoucher?.status === "partially_redeemed") &&
+    inValidity;
   const totalAmount = activeVoucher?.amount || 0;
   const totalQty = activeVoucher?.qty || 0;
   const redeemedAmount = redemptions.reduce(
@@ -132,9 +198,11 @@ export default function SearchVoucher() {
   );
   const remainingAmount = Math.max(0, totalAmount - redeemedAmount);
   const remainingQty = Math.max(0, totalQty - redeemedQty);
+  // Redemption is allowed even offline — the record is stored locally only.
+  // Goods redemptions additionally require available hamper balance.
   const canRedeem =
     isSubmitted &&
-    isOnline &&
+    hasGoodsBalance &&
     (isCash ? remainingAmount > 0 : remainingQty > 0);
 
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -242,7 +310,7 @@ export default function SearchVoucher() {
         <Card className="border-amber-500/40 bg-amber-500/5">
           <CardContent className="pt-6 text-sm text-amber-700 dark:text-amber-300 flex items-center gap-2">
             <Package className="h-4 w-4 shrink-0" />
-            Offline — searching from the last synced voucher data.
+            Offline — searching from the last cached voucher data.
           </CardContent>
         </Card>
       )}
@@ -276,6 +344,10 @@ export default function SearchVoucher() {
           remainingAmount={remainingAmount}
           remainingQty={remainingQty}
           canRedeem={canRedeem}
+          beneficiary={selectedBeneficiary}
+          bom={selectedBom}
+          hamperBalance={hamperBalance}
+          noStock={!isCash && hamperBalance <= 0}
         />
       )}
 
@@ -284,8 +356,8 @@ export default function SearchVoucher() {
           <CardContent className="pt-6 text-center py-12">
             <p className="text-muted-foreground">
               {isOnline
-                ? "No submitted voucher found matching your search."
-                : "No cached voucher found matching your search. Sync online to refresh."}
+                ? "No active voucher found matching your search."
+                : "No cached voucher found matching your search. Refresh online to load it."}
             </p>
           </CardContent>
         </Card>
