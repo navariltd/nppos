@@ -6,14 +6,16 @@ import {
   FileSearch,
   FolderOpen,
   Search,
+  SlidersHorizontal,
   Tags,
   X,
 } from "lucide-react";
-import { useFrappeGetCall } from "frappe-react-sdk";
+import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
-import { routes, type RouteConfig } from "@/config/routes";
+import { APP_PAGES_ENABLED, routes, type RouteConfig } from "@/config/routes";
+import { doctypeToSlug } from "@/lib/doctype-map";
 
 interface SearchItem {
   title: string;
@@ -40,25 +42,54 @@ function formatTitle(path: string): string {
     .join(" ");
 }
 
+/** True when the path contains a dynamic segment such as ":id". */
+function hasDynamicSegment(path: string): boolean {
+  return path.split("/").some((seg) => seg.startsWith(":"));
+}
+
+/**
+ * Join a parent path and a child route segment into a single absolute path,
+ * always producing a leading "/" and collapsing any duplicate slashes. Handles
+ * both relative segments ("transactions") and absolute ones ("/errors/x").
+ */
+function joinPaths(parentPath: string, path: string): string {
+  const parts = [...parentPath.split("/"), ...path.split("/")].filter(Boolean);
+  return "/" + parts.join("/");
+}
+
+/**
+ * Build the "App Pages" search items from the route tree. A page appears only
+ * when:
+ * - it is explicitly marked `searchable: true` (the default is excluded),
+ * - it is not the catch-all ("*") or a <Navigate> redirect, and
+ * - its path has no dynamic segments (e.g. ":id").
+ *
+ * The label uses the route's `searchTitle` when provided, otherwise falls back
+ * to a slug-derived title. It never uses the page component's name.
+ */
 function getSearchItemsFromRoutes(): SearchItem[] {
   const items: SearchItem[] = [];
   const visitedPaths = new Set<string>();
 
-  function extractRoutes(route: RouteConfig, parentPath: string = "") {
-    const path = route.path === "/" ? "" : route.path;
-    const fullPath = `${parentPath}${path}`.replace(/\/+/g, "/");
+  function extractRoutes(route: RouteConfig, parentPath: string = "/") {
+    const rawPath = route.path ?? "";
+    const path = rawPath === "/" ? "" : rawPath;
+    const fullPath = joinPaths(parentPath, path);
+
+    const isNavigate = (route.element as any)?.type?.name === "Navigate";
+    const isRoot = fullPath === "/" || fullPath === "";
 
     if (
-      path === "*" ||
-      ((route.element as any)?.type?.name === "Navigate")
+      path !== "*" &&
+      !isNavigate &&
+      !isRoot &&
+      route.searchable === true &&
+      !hasDynamicSegment(fullPath) &&
+      !visitedPaths.has(fullPath)
     ) {
-      return;
-    }
-
-    if (fullPath && !visitedPaths.has(fullPath) && fullPath !== "/") {
       visitedPaths.add(fullPath);
       items.push({
-        title: formatTitle(fullPath),
+        title: route.searchTitle || formatTitle(fullPath),
         url: fullPath,
         group: "App Pages",
       });
@@ -73,6 +104,38 @@ function getSearchItemsFromRoutes(): SearchItem[] {
   return items;
 }
 
+/**
+ * Reduce a table-qualified field expression (e.g. "`tabDocType`.`name`") to a
+ * plain column name ("name").
+ */
+function normalizeKey(key: string): string {
+  const parts = String(key).replace(/`/g, "").split(".");
+  return parts[parts.length - 1] || key;
+}
+
+/**
+ * Normalise the `frappe.desk.reportview.get` payload into an array of plain
+ * row objects. Accepts both the compressed `{ keys, values }` shape and a raw
+ * array of objects.
+ */
+function rowsFromReport(message: any): any[] {
+  if (!message) return [];
+  if (Array.isArray(message)) return message;
+  if (Array.isArray(message.values)) {
+    const keys = (message.keys || []).map((k: string) => normalizeKey(k));
+    return message.values.map((row: any[]) =>
+      keys.reduce(
+        (acc: Record<string, any>, key: string, i: number) => {
+          acc[key] = row[i];
+          return acc;
+        },
+        {},
+      ),
+    );
+  }
+  return [];
+}
+
 export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
   const navigate = useNavigate();
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -85,6 +148,12 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
   const [limit, setLimit] = React.useState(100);
   const [start, setStart] = React.useState(0);
   const [allowedDocTypes, setAllowedDocTypes] = React.useState<string[]>([]);
+  // When false (default), only App Pages + Doctypes are returned as one flat
+  // list. When true, global search results and the doctype filter pills are
+  // included too.
+  const [advancedMode, setAdvancedMode] = React.useState(false);
+  // Collapses the doctype filter pills bar in advanced mode (default collapsed).
+  const [filtersCollapsed, setFiltersCollapsed] = React.useState(true);
 
   const queryTerm = searchTerm.trim().replace(/\s\s+/g, " ");
   const shouldSearch = queryTerm.length > 1;
@@ -117,13 +186,39 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
     searchParams.doctype = selectedDocType;
   }
 
-  const { data: searchResponse, isValidating: isSearching } = useFrappeGetCall(
-    shouldSearch ? "frappe.utils.global_search.search" : (null as any),
+  // Global search only runs in advanced mode; the simple mode limits itself to
+  // App Pages + Doctypes.
+  const { data: searchResponse, isValidating: isSearchingGlobal } = useFrappeGetCall(
+    shouldSearch && advancedMode ? "frappe.utils.global_search.search" : (null as any),
     searchParams,
-    shouldSearch
+    shouldSearch && advancedMode
       ? `awesomebar-${selectedDocType}-${queryTerm}-${start}-${limit}`
       : null,
   );
+
+  // Fetch matching doctypes for the "Doctypes" results group (List / New links).
+  const { call: fetchDocTypes, result: docTypeResponse, loading: loadingDocTypes } = useFrappePostCall(
+    "frappe.desk.reportview.get",
+  );
+
+  React.useEffect(() => {
+    if (!shouldSearch || !APP_PAGES_ENABLED || typeof fetchDocTypes !== "function") return;
+    fetchDocTypes({
+      doctype: "DocType",
+      fields: [
+        "`tabDocType`.`name`",
+        "`tabDocType`.`issingle`",
+        "`tabDocType`.`istable`",
+      ],
+      filters: [
+        ["DocType", "name", "like", `%${queryTerm}%`],
+        ["DocType", "istable", "=", 0],
+      ],
+      order_by: "`tabDocType`.`name` asc",
+      start: 0,
+      page_length: 20,
+    });
+  }, [shouldSearch, queryTerm, fetchDocTypes]);
 
   React.useEffect(() => {
     setStart(0);
@@ -143,6 +238,8 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
       setSelectedDocType("All");
       setStart(0);
       setFocusedIndex(0);
+      setAdvancedMode(false);
+      setFiltersCollapsed(true);
     }
   }, [open]);
 
@@ -158,6 +255,51 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
         (item.url && item.url.toLowerCase().includes(lower)),
     );
   }, [routeItems, queryTerm]);
+
+  // Build the "Doctypes" results group from the DocType lookup. Single doctypes
+  // only surface their name (no List/New); regular doctypes get "New X" and
+  // "X List" entries that link into the /app/:doctype routes.
+  const docTypeItems = React.useMemo(() => {
+    if (!APP_PAGES_ENABLED) return [];
+    const items: SearchItem[] = [];
+    const seen = new Set<string>();
+    for (const row of rowsFromReport(docTypeResponse?.message)) {
+      const name = row.name;
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      const slug = doctypeToSlug(name);
+      if (Number(row.issingle) === 1) {
+        items.push({
+          title: name,
+          url: `/app/${slug}`,
+          group: "Doctypes",
+          description: "Single document",
+        });
+      } else {
+        items.push({
+          title: `New ${name}`,
+          url: `/app/${slug}/new`,
+          group: "Doctypes",
+          description: `Create new ${name}`,
+        });
+        items.push({
+          title: `${name} List`,
+          url: `/app/${slug}`,
+          group: "Doctypes",
+          description: `Browse ${name} records`,
+        });
+      }
+    }
+    return items;
+  }, [docTypeResponse]);
+
+  // Simple (default) mode results: App Pages + Doctypes combined into a single
+  // flat list with no grouping and no filter pills.
+  const defaultResults = React.useMemo(() => {
+    const items: SearchItem[] = [...filteredRouteItems];
+    if (shouldSearch) items.push(...docTypeItems);
+    return items;
+  }, [filteredRouteItems, docTypeItems, shouldSearch]);
 
   const filteredOptions = React.useMemo(() => {
     const allItems: SearchItem[] = [];
@@ -180,6 +322,7 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
           group: item.doctype || "Other",
         });
       }
+      allItems.push(...docTypeItems);
     }
 
     // Group by group name
@@ -193,12 +336,17 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
       grouped[type].push(item);
     }
 
-    // Sort groups with selectedDocType first, then "App Pages", then alphabetical
+    // Sort groups: active filter first, then "App Pages", "Doctypes", the
+    // advanced (global search) doctype groups alphabetically, and "Other" last.
     const sortedGroups = Object.keys(grouped).sort((a, b) => {
       if (a === selectedDocType) return -1;
       if (b === selectedDocType) return 1;
       if (a === "App Pages") return -1;
       if (b === "App Pages") return 1;
+      if (a === "Doctypes") return -1;
+      if (b === "Doctypes") return 1;
+      if (a === "Other") return 1;
+      if (b === "Other") return -1;
       return a.localeCompare(b);
     });
 
@@ -207,7 +355,7 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
       sorted[key] = grouped[key];
     }
     return sorted;
-  }, [shouldSearch, routeItems, filteredRouteItems, searchResponse, selectedDocType]);
+  }, [shouldSearch, routeItems, filteredRouteItems, docTypeItems, searchResponse, selectedDocType]);
 
   // Flatten all visible (non-collapsed) items for keyboard navigation
   const flattenedOptions = React.useMemo(() => {
@@ -218,6 +366,10 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
 
   const hasResults = Object.keys(filteredOptions).length > 0;
 
+  // Items the keyboard can navigate over: the flat default list in simple mode,
+  // or the flattened grouped list in advanced mode.
+  const keyboardOptions = advancedMode ? flattenedOptions : defaultResults;
+
   // Keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -225,21 +377,21 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
       return;
     }
 
-    if (flattenedOptions.length === 0) return;
+    if (keyboardOptions.length === 0) return;
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setFocusedIndex((prev) => (prev + 1) % flattenedOptions.length);
+      setFocusedIndex((prev) => (prev + 1) % keyboardOptions.length);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setFocusedIndex(
         (prev) =>
-          (prev - 1 + flattenedOptions.length) % flattenedOptions.length,
+          (prev - 1 + keyboardOptions.length) % keyboardOptions.length,
       );
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (flattenedOptions[focusedIndex]) {
-        handleSelectOption(flattenedOptions[focusedIndex]);
+      if (keyboardOptions[focusedIndex]) {
+        handleSelectOption(keyboardOptions[focusedIndex]);
       }
     }
   };
@@ -293,9 +445,81 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
     });
   }, [allowedDocTypes, filteredOptions]);
 
+  // Combined loading state for the global search and the doctype lookup.
+  const isSearching = isSearchingGlobal || loadingDocTypes;
+
   if (!open) return null;
 
   let globalItemIndex = 0;
+
+  // Reusable single result row used by both the simple flat list and the
+  // grouped advanced list. `currentIndex` is its position in the visible list,
+  // used for keyboard focus highlighting.
+  const renderItem = (option: SearchItem, currentIndex: number) => {
+    const isFocused = currentIndex === focusedIndex;
+    return (
+      <div
+        key={`${option.group}-${option.title}-${option.name || currentIndex}`}
+        data-active={isFocused}
+        className={`flex items-center justify-between gap-x-4 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 text-left ${
+          isFocused
+            ? "bg-primary text-primary-foreground"
+            : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
+        }`}
+        onClick={() => handleSelectOption(option)}
+        onMouseEnter={() => setFocusedIndex(currentIndex)}
+      >
+        <div className="flex items-center gap-x-4 min-w-0 grow">
+          {option.url ? (
+            <FileSearch
+              className={`w-4 h-4 shrink-0 transition-colors ${
+                isFocused ? "text-primary-foreground" : "text-zinc-400"
+              }`}
+            />
+          ) : (
+            <FolderOpen
+              className={`w-4 h-4 shrink-0 transition-colors ${
+                isFocused ? "text-primary-foreground" : "text-zinc-400"
+              }`}
+            />
+          )}
+          <div className="flex flex-col min-w-0">
+            <span
+              className={`text-sm font-semibold truncate ${
+                isFocused
+                  ? "text-primary-foreground"
+                  : "text-zinc-900 dark:text-zinc-100"
+              }`}
+            >
+              {option.title}
+            </span>
+            {option.description && (
+              <span
+                className={`text-xs truncate mt-0.5 max-w-xl ${
+                  isFocused
+                    ? "text-primary-foreground/80"
+                    : "text-zinc-400 dark:text-zinc-500"
+                }`}
+              >
+                {option.description}
+              </span>
+            )}
+          </div>
+        </div>
+        {option.name && (
+          <span
+            className={`text-[11px] font-mono px-2 py-0.5 rounded shrink-0 transition-colors ${
+              isFocused
+                ? "bg-primary-foreground/20 text-primary-foreground"
+                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
+            }`}
+          >
+            {option.name}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div
@@ -307,8 +531,8 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Input */}
-        <div className="flex items-center justify-between p-5 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
-          <div className="flex items-center gap-x-4 grow">
+        <div className="flex items-center justify-between gap-x-3 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
+          <div className="flex items-center gap-x-3 grow">
             <Search className="text-primary w-5 h-5 shrink-0" />
             <input
               ref={inputRef}
@@ -324,68 +548,107 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
             />
           </div>
           <button
+            onClick={() => setAdvancedMode((v) => !v)}
+            title={
+              advancedMode
+                ? "Switch back to simple search"
+                : "Include global search results and doctype filters"
+            }
+            className={`flex items-center gap-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors shrink-0 ${
+              advancedMode
+                ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            {advancedMode ? "Simple" : "Advanced"}
+          </button>
+          <button
             onClick={() => onOpenChange(false)}
-            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 p-1 rounded-lg transition-colors"
+            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 p-1 rounded-lg transition-colors shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* DocType Filter Pills */}
-        {reorderedDocTypes.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 p-3 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
+        {/* DocType Filter Pills (advanced mode only, collapsible) */}
+        {advancedMode && reorderedDocTypes.length > 0 && (
+          <div className="border-b border-zinc-200 dark:border-zinc-800 shrink-0">
             <button
-              onClick={() => setSelectedDocType("All")}
-              className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all shrink-0 ${
-                selectedDocType === "All"
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700"
-              }`}
+              onClick={() => setFiltersCollapsed((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors cursor-pointer"
             >
-              All Results
+              <span className="flex items-center gap-x-2">
+                <Tags className="w-3.5 h-3.5 opacity-70" />
+                Filters
+                <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-[10px] normal-case font-bold">
+                  {selectedDocType === "All"
+                    ? `${reorderedDocTypes.length} doctypes`
+                    : selectedDocType}
+                </span>
+              </span>
+              {filtersCollapsed ? (
+                <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+              ) : (
+                <ChevronUp className="w-3.5 h-3.5 text-zinc-400" />
+              )}
             </button>
-            {reorderedDocTypes.map((type) => {
-              const isSelected = selectedDocType === type;
-              const hasMatches = filteredOptions[type] !== undefined;
-              return (
+            {!filtersCollapsed && (
+              <div className="flex flex-wrap items-center gap-2 px-3 pb-3 bg-zinc-50 dark:bg-zinc-900">
                 <button
-                  key={type}
-                  onClick={() => setSelectedDocType(type)}
-                  className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all shrink-0 relative ${
-                    isSelected
+                  onClick={() => setSelectedDocType("All")}
+                  className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all shrink-0 ${
+                    selectedDocType === "All"
                       ? "bg-primary text-primary-foreground shadow-sm"
-                      : hasMatches
-                        ? "bg-primary/10 text-primary border border-primary/30 shadow-sm font-bold ring-2 ring-primary/20"
-                        : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700"
+                      : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700"
                   }`}
                 >
-                  {type}
-                  {hasMatches && !isSelected && (
-                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
-                  )}
+                  All Results
                 </button>
-              );
-            })}
+                {reorderedDocTypes.map((type) => {
+                  const isSelected = selectedDocType === type;
+                  const hasMatches = filteredOptions[type] !== undefined;
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => setSelectedDocType(type)}
+                      className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all shrink-0 relative ${
+                        isSelected
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : hasMatches
+                            ? "bg-primary/10 text-primary border border-primary/30 shadow-sm font-bold ring-2 ring-primary/20"
+                            : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700"
+                      }`}
+                    >
+                      {type}
+                      {hasMatches && !isSelected && (
+                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
         {/* Results Area */}
         <div
           ref={listContainerRef}
-          className="overflow-y-auto p-6 bg-zinc-50/40 dark:bg-zinc-950/40 grow scroll-smooth"
+          className="overflow-y-auto px-4 py-3 bg-zinc-50/40 dark:bg-zinc-950/40 grow scroll-smooth"
         >
-          {shouldSearch ? (
-            hasResults ? (
+          {advancedMode ? (
+            shouldSearch ? (
+              hasResults ? (
               <div className="flex flex-col gap-y-6 max-w-none">
                 {Object.entries(filteredOptions).map(([group, items]) => {
                   const isCollapsed = collapsedGroups[group];
                   const isTargetGroup = group === selectedDocType;
-                  const startIndex = globalItemIndex;
 
                   return (
                     <div
                       key={group}
-                      className={`flex flex-col gap-y-2 ${
+                      className={`flex flex-col gap-y-1.5 ${
                         isTargetGroup
                           ? "border-2 border-primary/20 p-4 rounded-2xl bg-primary/5 shadow-sm"
                           : ""
@@ -424,80 +687,10 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
                       </div>
 
                       {!isCollapsed && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1.5 shadow-sm w-full">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1.5 shadow-sm w-full">
                           {items.map((option) => {
-                            const isFocused = globalItemIndex === focusedIndex;
-                            const currentIndex = globalItemIndex;
-                            globalItemIndex++;
-
-                            return (
-                              <div
-                                key={`${group}-${option.title}-${option.name || currentIndex}`}
-                                data-active={isFocused}
-                                className={`flex items-center justify-between gap-x-4 px-4 py-3 rounded-lg cursor-pointer transition-all duration-150 text-left ${
-                                  isFocused
-                                    ? "bg-primary text-primary-foreground"
-                                    : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                                }`}
-                                onClick={() => handleSelectOption(option)}
-                                onMouseEnter={() =>
-                                  setFocusedIndex(currentIndex)
-                                }
-                              >
-                                <div className="flex items-center gap-x-4 min-w-0 grow">
-                                  {option.url ? (
-                                    <FileSearch
-                                      className={`w-4 h-4 shrink-0 transition-colors ${
-                                        isFocused
-                                          ? "text-primary-foreground"
-                                          : "text-zinc-400"
-                                      }`}
-                                    />
-                                  ) : (
-                                    <FolderOpen
-                                      className={`w-4 h-4 shrink-0 transition-colors ${
-                                        isFocused
-                                          ? "text-primary-foreground"
-                                          : "text-zinc-400"
-                                      }`}
-                                    />
-                                  )}
-                                  <div className="flex flex-col min-w-0">
-                                    <span
-                                      className={`text-sm font-semibold truncate ${
-                                        isFocused
-                                          ? "text-primary-foreground"
-                                          : "text-zinc-900 dark:text-zinc-100"
-                                      }`}
-                                    >
-                                      {option.title}
-                                    </span>
-                                    {option.description && (
-                                      <span
-                                        className={`text-xs truncate mt-0.5 max-w-xl ${
-                                          isFocused
-                                            ? "text-primary-foreground/80"
-                                            : "text-zinc-400 dark:text-zinc-500"
-                                        }`}
-                                      >
-                                        {option.description}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                {option.name && (
-                                  <span
-                                    className={`text-[11px] font-mono px-2 py-0.5 rounded shrink-0 transition-colors ${
-                                      isFocused
-                                        ? "bg-primary-foreground/20 text-primary-foreground"
-                                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
-                                    }`}
-                                  >
-                                    {option.name}
-                                  </span>
-                                )}
-                              </div>
-                            );
+                            const currentIndex = globalItemIndex++;
+                            return renderItem(option, currentIndex);
                           })}
                         </div>
                       )}
@@ -521,10 +714,9 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
             <div className="flex flex-col gap-y-6 max-w-none">
               {Object.entries(filteredOptions).map(([group, items]) => {
                 const isCollapsed = collapsedGroups[group];
-                const startIndex = globalItemIndex;
 
                 return (
-                  <div key={group} className="flex flex-col gap-y-2">
+                  <div key={group} className="flex flex-col gap-y-1.5">
                     {/* Group Header */}
                     <div
                       onClick={() => toggleGroupCollapse(group)}
@@ -545,42 +737,10 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
                     </div>
 
                     {!isCollapsed && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1.5 shadow-sm w-full">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1.5 shadow-sm w-full">
                         {items.map((option) => {
-                          const isFocused = globalItemIndex === focusedIndex;
-                          const currentIndex = globalItemIndex;
-                          globalItemIndex++;
-
-                          return (
-                            <div
-                              key={`${group}-${option.title}-${option.name || currentIndex}`}
-                              data-active={isFocused}
-                              className={`flex items-center justify-between gap-x-4 px-4 py-3 rounded-lg cursor-pointer transition-all duration-150 text-left ${
-                                isFocused
-                                  ? "bg-primary text-primary-foreground"
-                                  : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                              }`}
-                              onClick={() => handleSelectOption(option)}
-                              onMouseEnter={() =>
-                                setFocusedIndex(currentIndex)
-                              }
-                            >
-                              <div className="flex items-center gap-x-4 min-w-0 grow">
-                                <FileSearch className="w-4 h-4 shrink-0 text-zinc-400" />
-                                <div className="flex flex-col min-w-0">
-                                  <span
-                                    className={`text-sm font-semibold truncate ${
-                                      isFocused
-                                        ? "text-primary-foreground"
-                                        : "text-zinc-900 dark:text-zinc-100"
-                                    }`}
-                                  >
-                                    {option.title}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          );
+                          const currentIndex = globalItemIndex++;
+                          return renderItem(option, currentIndex);
                         })}
                       </div>
                     )}
@@ -588,11 +748,40 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
                 );
               })}
             </div>
+            )
+          )
+          : (
+            shouldSearch ? (
+              defaultResults.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                  {defaultResults.map((option, index) =>
+                    renderItem(option, index),
+                  )}
+                </div>
+              ) : isSearching ? (
+                <div className="flex items-center justify-center h-full text-sm text-zinc-400">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-zinc-300 border-t-primary rounded-full animate-spin" />
+                    Searching...
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full text-sm text-zinc-400">
+                  No matches found for "{searchTerm}".
+                </div>
+              )
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                {defaultResults.map((option, index) =>
+                  renderItem(option, index),
+                )}
+              </div>
+            )
           )}
         </div>
 
         {/* Footer: Navigation tips, Per Page, Pagination */}
-        <div className="bg-zinc-50 dark:bg-zinc-900 px-5 py-3 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
+        <div className="bg-zinc-50 dark:bg-zinc-900 px-4 py-2 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <div className="flex items-center gap-x-2 text-[11px] text-zinc-400">
               <span>↑↓ to navigate</span>
@@ -602,7 +791,7 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
               <span>Esc to close</span>
             </div>
 
-            {shouldSearch && (
+            {advancedMode && shouldSearch && (
               <div className="flex items-center gap-x-2 border-l border-zinc-200 dark:border-zinc-700 pl-4">
                 <span className="text-[11px] font-medium text-zinc-500">
                   Per Page:
@@ -623,7 +812,7 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
             )}
           </div>
 
-          {shouldSearch &&
+          {advancedMode && shouldSearch &&
             ((searchResponse?.message as any[])?.length > 0 || start > 0) && (
               <div className="flex items-center gap-x-3">
                 <button
