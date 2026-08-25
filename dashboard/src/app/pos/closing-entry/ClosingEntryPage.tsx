@@ -73,7 +73,6 @@ export default function ClosingEntryPage() {
   if (!user) return <Navigate to="/auth/sign-in" replace />;
 
   const hasDifferences = payments.some((p) => Math.abs(p.difference) > 0.01);
-  const hasRedemptions = redemptions.length > 0;
 
   return (
     <div className="px-4 lg:px-6 space-y-6 pb-8">
@@ -107,7 +106,7 @@ export default function ClosingEntryPage() {
           <Button
             size="lg"
             onClick={handleSave}
-            disabled={isSaving || isLoadingData || !hasRedemptions}
+            disabled={isSaving || isLoadingData}
             className="gap-2"
           >
             {isSaving ? (
