@@ -9,6 +9,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOffline } from "@/contexts/offline-context";
 import { useUser } from "@/contexts/user-context";
+import { POS_PROFILE_CACHE_KEY, POS_PROFILE_CHANGED_EVENT } from "@/lib/pos-session";
 import * as React from "react";
 
 export function SiteHeader() {
@@ -16,6 +17,27 @@ export function SiteHeader() {
   const { isOnline } = useOffline();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [hovered, setHovered] = React.useState(false);
+  const [posProfile, setPosProfile] = React.useState<{
+    name?: string;
+    warehouse?: string;
+  } | null>(null);
+
+  // Read the open POS profile from the shared cache (kept in sync by the POS
+  // context via a custom window event) so the badge shows the active session.
+  React.useEffect(() => {
+    const readProfile = () => {
+      try {
+        const cached = sessionStorage.getItem(POS_PROFILE_CACHE_KEY);
+        setPosProfile(cached ? JSON.parse(cached) : null);
+      } catch {
+        setPosProfile(null);
+      }
+    };
+    readProfile();
+    window.addEventListener(POS_PROFILE_CHANGED_EVENT, readProfile);
+    return () =>
+      window.removeEventListener(POS_PROFILE_CHANGED_EVENT, readProfile);
+  }, []);
 
   return (
     <>
@@ -36,6 +58,19 @@ export function SiteHeader() {
             </div>
           )}
           <div className="ml-auto flex items-center gap-2">
+            {posProfile?.name && (
+              <span
+                title={
+                  posProfile.warehouse
+                    ? `${posProfile.name} · ${posProfile.warehouse}`
+                    : posProfile.name
+                }
+                className="inline-flex max-w-[180px] items-center gap-1.5 rounded-full border bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
+              >
+                <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
+                <span className="truncate">{posProfile.name}</span>
+              </span>
+            )}
             {!isOnline && (
               <span
                 className="relative inline-flex items-center justify-center rounded-md border-2 p-1.5 cursor-default"
