@@ -14,6 +14,8 @@ interface UseFormActionsOptions {
   onSuccess?: (name: string) => void;
   onError?: (msg: string) => void;
   onWorkflowSuccess?: () => void;
+  /** Called only after a successful submit (docstatus 0 → 1). */
+  onSubmitSuccess?: (name: string) => void;
 }
 
 interface UseFormActionsReturn {
@@ -30,7 +32,7 @@ interface UseFormActionsReturn {
 }
 
 export function useFormActions(opts: UseFormActionsOptions): UseFormActionsReturn {
-  const { doctype, docId, form, isNew, onSuccess, onError, onWorkflowSuccess } = opts;
+  const { doctype, docId, form, isNew, onSuccess, onError, onWorkflowSuccess, onSubmitSuccess } = opts;
   const navigate = useNavigate();
   const { call: updateDoc } = useFrappePostCall("frappe.client.save");
   const { call: saveDocs } = useFrappePostCall("frappe.desk.form.save.savedocs");
@@ -81,6 +83,7 @@ export function useFormActions(opts: UseFormActionsOptions): UseFormActionsRetur
       if (d) {
         toast.success(`${doctype} submitted successfully`);
         onSuccess?.(docId);
+        onSubmitSuccess?.(docId);
       }
     } catch (err: any) {
       const msg = parseFrappeError(err);
@@ -89,7 +92,7 @@ export function useFormActions(opts: UseFormActionsOptions): UseFormActionsRetur
     } finally {
       setIsSubmitting(false);
     }
-  }, [doctype, docId, form, onSuccess, onError, saveDocs]);
+  }, [doctype, docId, form, onSuccess, onError, onSubmitSuccess, saveDocs]);
 
   const handleCancel = useCallback(async () => {
     if (!doctype || !docId) return;

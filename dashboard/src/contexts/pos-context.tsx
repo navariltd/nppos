@@ -1,5 +1,11 @@
 import { useUser } from "@/contexts/user-context";
 import { callGet, callPost } from "@/lib/frappe-service";
+import {
+  POS_OPENING_CACHE_KEY as STORAGE_KEY_OPENING,
+  POS_PROFILE_CACHE_KEY as STORAGE_KEY_PROFILE,
+  POS_PROFILE_CHANGED_EVENT,
+  POS_SESSION_CACHE_KEY as STORAGE_KEY_SESSION,
+} from "@/lib/pos-session";
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 interface POSContextType {
@@ -11,10 +17,6 @@ interface POSContextType {
   hasCachedData: boolean;
   refreshPOSMetadata: () => Promise<void>;
 }
-
-const STORAGE_KEY_SESSION = "np-pos:sessionDefaults";
-const STORAGE_KEY_OPENING = "np-pos:posOpeningEntry";
-const STORAGE_KEY_PROFILE = "np-pos:posProfile";
 
 /**
  * Load cached data from sessionStorage so a remount (navigation away and back)
@@ -95,6 +97,8 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
     if (profileData?.message) {
       setPosProfile(profileData.message);
       saveCache(STORAGE_KEY_PROFILE, profileData.message);
+      // Notify the app header badge that the open POS profile changed.
+      window.dispatchEvent(new Event(POS_PROFILE_CHANGED_EVENT));
     }
   }, [profileData]);
 

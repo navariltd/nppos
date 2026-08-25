@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUser } from "@/contexts/user-context";
+import { clearPOSSession } from "@/lib/pos-session";
 import { ConfirmCancelDialog, ConfirmSubmitDialog, ErrorDialog } from "./form/ConfirmationDialogs";
 import { FormHeader } from "./form/FormHeader";
 import { TabbedForm } from "./form/TabbedForm";
@@ -72,8 +73,17 @@ export function DocTypeForm({ doctype, docname: propDocname, forceNew = false, o
     handleWorkflowAction,
   } = useFormActions({
     doctype, docId, form, isNew,
-    onSuccess,
+    onSuccess: (name) => {
+      // Reload the doc after save/submit/cancel so docstatus-driven actions
+      // (Submit/Cancel/Amend) reflect the latest server state without a reload.
+      reloadDoc();
+      onSuccess?.(name);
+    },
     onError: (msg) => { setError(msg); setErrorDialogOpen(true); },
+    onSubmitSuccess: () => {
+      // Submitting a POS Closing Entry closes the session, so clear the badge.
+      if (doctype === "POS Closing Entry") clearPOSSession();
+    },
     onWorkflowSuccess: async () => {
       await handleWorkflowSuccess();
       await reloadDoc();
