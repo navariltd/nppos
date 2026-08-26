@@ -256,7 +256,10 @@ def _redeem_voucher(client_ref, payload, entitlement_type):
         red.amount = payload.get("amount") or ev.amount
     else:
         red.qty = payload.get("qty") or ev.qty
-        red.amount = ev.amount
+        if ev.qty and red.qty and red.qty != ev.qty:
+            red.amount = (ev.rate or 0) * red.qty or (ev.amount or 0) * red.qty / ev.qty
+        else:
+            red.amount = ev.amount
 
     red.insert(ignore_permissions=True)
     red.submit()
