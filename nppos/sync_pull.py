@@ -14,8 +14,12 @@ from .sync_utils import COLLECTIONS, agent_pos_profiles, employee_for
 
 def _voucher_status(v, is_goods, agg):
     """Derive the app-facing status (active | partially_redeemed | redeemed |
-    expired) from validity + redemptions. The backend's Select `status` is not
-    maintained on submit, so it can't be trusted (docs/NPPOS_WEB.md gap #1)."""
+    expired) from validity + redemptions.
+
+    Entitlement Redemption DOES maintain the voucher's Select `status` on
+    submit/cancel now, but the derived value is still what we send: it also
+    folds in expiry (nothing flips a voucher to Expired on its valid_to) and the
+    spec's 2-use limit, neither of which the stored status reflects."""
     from frappe.utils import getdate, nowdate
 
     if v.valid_to and getdate(v.valid_to) < getdate(nowdate()):
@@ -221,6 +225,7 @@ def _vouchers(voucher_names, warehouses, redeemed, project_to_ada):
                 "rate",
                 "amount",
                 "project",
+                "warehouse",
                 "party_type",
                 "party",
                 "image",
@@ -261,6 +266,7 @@ def _vouchers(voucher_names, warehouses, redeemed, project_to_ada):
                 "uses_count": agg["uses"],
                 "max_uses": 2,  # spec-level local rule; no backend counter yet
                 "project": v.project or "",
+                "warehouse": v.warehouse or "",
                 "assignment_id": project_to_ada.get(v.project),
                 "image": v.image or None,
                 "doc": full_doc,  # full Entitlement Voucher document
@@ -275,18 +281,30 @@ def _vouchers(voucher_names, warehouses, redeemed, project_to_ada):
     return vouchers, goods_item_codes, bom_names, party_names
 
 
-def _agent_stock(warehouses, goods_item_codes):
-    """Bin levels across the POS-profile warehouses for the goods items."""
+def _agent_stock(warehouses, voucher_item_codes=()):
+    """Bin levels across the POS-profile warehouses — a FULL snapshot.
+
+    Never scoped to the vouchers in this pull's delta: adding stock in the desk
+    touches only the Bin, so a voucher-derived item list starves this collection
+    the moment no voucher has changed and the device never sees the new
+    quantity. The agent's slice is tiny and the device upserts idempotently, so
+    sending it in full every pull is cheap.
+
+    Anything actually holding stock is included, plus the goods items the
+    vouchers in this pull name even at zero on-hand — an agent expected to hand
+    out an item needs to see that it has run out, not an absent row.
+    """
     agent_stock = []
-    if warehouses and goods_item_codes:
-        for bin_row in frappe.get_all(
+    if warehouses:
+        rows = frappe.get_all(
             "Bin",
-            filters={
-                "warehouse": ["in", warehouses],
-                "item_code": ["in", list(goods_item_codes)],
-            },
+            filters={"warehouse": ["in", warehouses]},
             fields=["warehouse", "item_code", "actual_qty"],
-        ):
+        )
+        wanted = set(voucher_item_codes)
+        for bin_row in rows:
+            if not (bin_row.actual_qty or 0) and bin_row.item_code not in wanted:
+                continue
             agent_stock.append(
                 {
                     "warehouse": bin_row.warehouse,
@@ -374,8 +392,9 @@ def build_pull_payload(cursors=None):
     )
 
     # ---- hampers + agent stock ----
-    hampers = [_hamper_for(code) for code in goods_item_codes]
     agent_stock = _agent_stock(warehouses, goods_item_codes)
+    stock_item_codes = {s["hamper_id"] for s in agent_stock if s["hamper_id"]}
+    hampers = [_hamper_for(code) for code in sorted(goods_item_codes | stock_item_codes)]
 
     # ---- BOMs (voucher-named + the stock items' defaults) ----
     # Both are needed: a redemption shows the VOUCHER's BOM, the stock screen

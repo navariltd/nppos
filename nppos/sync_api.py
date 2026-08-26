@@ -80,7 +80,7 @@ def login(email=None, password=None):
 
     employee = employee_for(email)
     pos_profiles = agent_pos_profiles(email, employee)
-    warehouse_code = pos_profiles[0]["warehouse"] if pos_profiles else ""
+    warehouse_code = pos_profiles[0]["warehouse"] if len(pos_profiles) == 1 else ""
 
     return {
         "token": f"{user.api_key}:{api_secret}",
