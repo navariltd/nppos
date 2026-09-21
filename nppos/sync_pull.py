@@ -9,25 +9,25 @@ warehouses. Idempotent — the device upserts what it receives.
 import frappe
 from frappe.utils import get_datetime, now
 
+from .sync_settings import max_uses_for, pos_settings
 from .sync_utils import COLLECTIONS, agent_pos_profiles, employee_for
 
 
-def _voucher_status(v, is_goods, agg):
+def _voucher_status(v, is_goods, agg, max_uses):
     """Derive the app-facing status (active | partially_redeemed | redeemed |
     expired) from validity + redemptions.
 
     Entitlement Redemption DOES maintain the voucher's Select `status` on
     submit/cancel now, but the derived value is still what we send: it also
     folds in expiry (nothing flips a voucher to Expired on its valid_to) and the
-    spec's 2-use limit, neither of which the stored status reflects."""
+    configured use limit, neither of which the stored status reflects."""
     from frappe.utils import getdate, nowdate
 
     if v.valid_to and getdate(v.valid_to) < getdate(nowdate()):
         return "expired"
     total = (v.qty or 0) if is_goods else (v.amount or 0)
     done = agg["qty"] if is_goods else agg["amount"]
-    # max_uses is the spec-level 2 (no backend counter yet).
-    if agg["uses"] >= 2 or (total and done >= total):
+    if agg["uses"] >= max_uses or (total and done >= total):
         return "redeemed"
     if agg["uses"] > 0:
         return "partially_redeemed"
@@ -202,7 +202,7 @@ def _redeemed_totals(voucher_names, warehouses):
     return redeemed
 
 
-def _vouchers(voucher_names, warehouses, redeemed, project_to_ada):
+def _vouchers(voucher_names, warehouses, redeemed, project_to_ada, settings):
     """Serialize the vouchers being returned, folding entitlement state inline."""
     voucher_rows = (
         frappe.get_all(
@@ -241,7 +241,10 @@ def _vouchers(voucher_names, warehouses, redeemed, project_to_ada):
     for v in voucher_rows:
         is_goods = v.entitlement_type == "Goods"
         agg = redeemed.get(v.name, {"amount": 0, "qty": 0, "uses": 0})
-        status = _voucher_status(v, is_goods, agg)
+        # Cash and goods have their own configured limits (AIGT HDR Settings ›
+        # POS App) — the same number the submit hook enforces.
+        max_uses = max_uses_for("Goods" if is_goods else "Cash", settings)
+        status = _voucher_status(v, is_goods, agg, max_uses)
         # Full doc so the offline-first web app can reconstruct every field
         # (company, cost_center, paid_from/to, bank_account, etc.) needed to
         # create a redemption locally.
@@ -264,7 +267,7 @@ def _vouchers(voucher_names, warehouses, redeemed, project_to_ada):
                 "valid_to": str(v.valid_to) if v.valid_to else "",
                 "status": status,
                 "uses_count": agg["uses"],
-                "max_uses": 2,  # spec-level local rule; no backend counter yet
+                "max_uses": max_uses,
                 "project": v.project or "",
                 "warehouse": v.warehouse or "",
                 "assignment_id": project_to_ada.get(v.project),
@@ -334,11 +337,13 @@ def build_pull_payload(cursors=None):
         cursors: dict of collection → last-sync timestamp (optional).
 
     Returns:
-        dict: assignments, vouchers, hampers, agent_stock, pos_profiles, cursors.
+        dict: assignments, vouchers, hampers, agent_stock, pos_profiles,
+        pos_settings, cursors.
     """
     user = frappe.session.user
     employee = employee_for(user)
     stamp = now()
+    settings = pos_settings()
 
     empty = {
         "assignments": [],
@@ -348,6 +353,7 @@ def build_pull_payload(cursors=None):
         "agent_stock": [],
         "pos_profiles": [],
         "beneficiaries": [],
+        "pos_settings": settings,
         "cursors": {k: stamp for k in COLLECTIONS},
     }
 
@@ -388,7 +394,7 @@ def build_pull_payload(cursors=None):
     # ---- redeemed totals + vouchers ----
     redeemed = _redeemed_totals(voucher_names, warehouses)
     vouchers, goods_item_codes, bom_names, party_names = _vouchers(
-        voucher_names, warehouses, redeemed, project_to_ada
+        voucher_names, warehouses, redeemed, project_to_ada, settings
     )
 
     # ---- hampers + agent stock ----
@@ -411,5 +417,6 @@ def build_pull_payload(cursors=None):
         "agent_stock": agent_stock,
         "pos_profiles": pos_profiles,
         "beneficiaries": _beneficiaries(party_names),
+        "pos_settings": settings,
         "cursors": {k: stamp for k in COLLECTIONS},
     }

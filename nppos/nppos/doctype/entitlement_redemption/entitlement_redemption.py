@@ -4,6 +4,8 @@
 import frappe
 from frappe.model.document import Document
 
+from nppos.sync_settings import max_uses_for
+
 
 class EntitlementRedemption(Document):
 	def validate(self):
@@ -62,15 +64,25 @@ class EntitlementRedemption(Document):
 			fields=["qty", "amount"],
 		)
 
+		max_uses = max_uses_for(self.entitlement_type)
+
+		uses = len(redemptions) + 1
+		if uses > max_uses:
+			frappe.throw(
+				f"Entitlement Voucher {self.entitlement_voucher} has reached its {max_uses}-use limit."
+			)
+
+		# A voucher is spent once its uses are exhausted, even with value left on it.
+		uses_exhausted = uses >= max_uses
+
 		if self.entitlement_type == "Goods":
 			total_redeemed = 0
 			for redemption in redemptions:
 				total_redeemed += redemption.qty or 0
 			total_redeemed += self.qty or 0
 
-			new_status = (
-				"Redeemed" if (voucher_qty and total_redeemed >= voucher_qty) else "Partially Redeemed"
-			)
+			fully_drawn = bool(voucher_qty) and total_redeemed >= voucher_qty
+			new_status = "Redeemed" if (fully_drawn or uses_exhausted) else "Partially Redeemed"
 
 		elif self.entitlement_type == "Cash":
 			total_redeemed = 0
@@ -78,9 +90,8 @@ class EntitlementRedemption(Document):
 				total_redeemed += redemption.amount or 0
 			total_redeemed += self.amount or 0
 
-			new_status = (
-				"Redeemed" if (voucher_amount and total_redeemed >= voucher_amount) else "Partially Redeemed"
-			)
+			fully_drawn = bool(voucher_amount) and total_redeemed >= voucher_amount
+			new_status = "Redeemed" if (fully_drawn or uses_exhausted) else "Partially Redeemed"
 
 		else:
 			return
@@ -107,29 +118,35 @@ class EntitlementRedemption(Document):
 			fields=["qty", "amount"],
 		)
 
+		# Cancelling frees a use back up, so the voucher can fall back from
+		# Redeemed to Partially Redeemed (or to Active once nothing is left).
+		uses_exhausted = len(redemptions) >= max_uses_for(self.entitlement_type)
+
 		if self.entitlement_type == "Goods":
 			total_redeemed = 0
 			for redemption in redemptions:
 				total_redeemed += redemption.qty or 0
 
+			fully_drawn = bool(voucher_qty) and total_redeemed >= voucher_qty
 			if total_redeemed == 0:
 				new_status = "Active"
-			elif voucher_qty and total_redeemed < voucher_qty:
-				new_status = "Partially Redeemed"
-			else:
+			elif fully_drawn or uses_exhausted:
 				new_status = "Redeemed"
+			else:
+				new_status = "Partially Redeemed"
 
 		elif self.entitlement_type == "Cash":
 			total_redeemed = 0
 			for redemption in redemptions:
 				total_redeemed += redemption.amount or 0
 
+			fully_drawn = bool(voucher_amount) and total_redeemed >= voucher_amount
 			if total_redeemed == 0:
 				new_status = "Active"
-			elif voucher_amount and total_redeemed < voucher_amount:
-				new_status = "Partially Redeemed"
-			else:
+			elif fully_drawn or uses_exhausted:
 				new_status = "Redeemed"
+			else:
+				new_status = "Partially Redeemed"
 
 		else:
 			return
