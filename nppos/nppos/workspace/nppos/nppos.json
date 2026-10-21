@@ -1,8 +1,7 @@
 {
- "app": "nppos",
  "charts": [],
- "content": "[{\"id\":\"npposhdr01\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>NPPOS</b></span>\",\"col\":12}},{\"id\":\"nppospos01\",\"type\":\"card\",\"data\":{\"card_name\":\"Point of Sale\",\"col\":6}},{\"id\":\"npposent01\",\"type\":\"card\",\"data\":{\"card_name\":\"Entitlements\",\"col\":6}}]",
- "creation": "2026-10-21 12:00:00.000000",
+ "content": "[{\"id\": \"npposhdr01\", \"type\": \"header\", \"data\": {\"text\": \"\\u003cspan class=\\\"h4\\\"\\u003e\\u003cb\\u003eNPPOS\\u003c/b\\u003e\\u003c/span\\u003e\", \"col\": 12}}, {\"id\": \"T1N7aEkXIy\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Open POS\", \"col\": 4}}, {\"id\": \"ufNZmgbMjs\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"nppospos01\", \"type\": \"card\", \"data\": {\"card_name\": \"Point of Sale\", \"col\": 6}}, {\"id\": \"npposent01\", \"type\": \"card\", \"data\": {\"card_name\": \"Entitlements\", \"col\": 6}}]",
+ "creation": "2026-10-21 12:00:00",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -70,7 +69,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-10-21 12:00:00.000000",
+ "modified": "2026-10-21 11:27:56.386500",
  "modified_by": "Administrator",
  "module": "NPPOS",
  "name": "NPPOS",
@@ -81,7 +80,15 @@
  "quick_lists": [],
  "roles": [],
  "sequence_id": 0.0,
- "shortcuts": [],
+ "shortcuts": [
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Open POS",
+   "type": "URL",
+   "url": "/nppos"
+  }
+ ],
  "standard": 1,
  "title": "NPPOS",
  "type": "Workspace"
