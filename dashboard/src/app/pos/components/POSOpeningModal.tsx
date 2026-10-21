@@ -163,7 +163,7 @@ export function POSOpeningModal({ onSuccess }: POSOpeningModalProps) {
               </div>
             </div>
 
-            <div className="space-y-1.5 pt-2">
+            {/* <div className="space-y-1.5 pt-2">
               <Table
                 doctype="POS Opening Entry Detail"
                 value={openingBalances}
@@ -174,7 +174,7 @@ export function POSOpeningModal({ onSuccess }: POSOpeningModalProps) {
                 label="Opening Balance Details"
                 required
               />
-            </div>
+            </div> */}
 
             <Button
               type="submit"
