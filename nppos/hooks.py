@@ -11,15 +11,15 @@ app_license = "agpl-3.0"
 required_apps = ["erpnext"]
 
 # Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "nppos",
-# 		"logo": "/assets/nppos/logo.png",
-# 		"title": "NPPOS",
-# 		"route": "/nppos",
-# 		"has_permission": "nppos.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+	{
+		"name": "nppos",
+		"logo": "/assets/nppos/logo.png",
+		"title": "NPPOS",
+		"route": "/desk/nppos",
+	}
+]
+
 
 # Includes in <head>
 # ------------------

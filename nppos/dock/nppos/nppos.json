@@ -1,0 +1,24 @@
+{
+ "app": "nppos",
+ "creation": "2026-10-21 12:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Dock",
+ "idx": 0,
+ "items": [
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "shopping-bag",
+   "link_to": "NPPOS",
+   "link_type": "Sidebar",
+   "title": "POS"
+  }
+ ],
+ "modified": "2026-10-21 12:00:00.000000",
+ "modified_by": "Administrator",
+ "mount_on": "",
+ "name": "nppos",
+ "owner": "Administrator",
+ "standard": 1,
+ "user": ""
+}
